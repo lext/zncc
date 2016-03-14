@@ -5,4 +5,4 @@ all:
 run:
 	./zncc im0.png im1.png
 clean:
-	rm zncc lodepng.o
+	rm zncc lodepng.o resized_left.png resized_right.png

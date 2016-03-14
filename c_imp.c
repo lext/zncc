@@ -2,9 +2,6 @@
 #include <stdlib.h>
 #include "lodepng.h"
 
-#define NEW_WIDTH 735
-#define NEW_HEIGHT 504
-
 unsigned char* OriginalImageL; // Left image
 unsigned char* OriginalImageR; // Right image
 unsigned char* Disparity;
@@ -15,13 +12,27 @@ unsigned char* ImageR; // Right image
 unsigned Error; // Error code
 unsigned Width, Height;
 
-unsigned char* resize(unsigned char* image, unsigned w, unsigned h, unsigned w_new, unsigned h_new)
+unsigned char* resize16(unsigned char* image, unsigned w, unsigned h)
 {
-	printf("%d %d %d %d\n", w, h, w_new, h_new);
-	return NULL;
+	unsigned char* resized = (unsigned char*) malloc(3*w*h/16);
+	resized[0] = image[0];
+	resized[1] = image[1];
+	resized[2] = image[2];
+	int i;
+
+	for (i = 16; i < 4*w*h - 16; i+= 16) {
+		resized[i - 16] = image[i];
+		resized[i + 1 - 16] = image[i + 1];
+		resized[i + 2 - 16] = image[i + 2];
+	}
+
+	return resized;
+
 };
 
+//unsigned char* rgb2gray(unsigned char* image, unsigned w, unsigned h) {
 
+//}
 
 int main(int argc, char** argv)
 {
@@ -56,12 +67,23 @@ int main(int argc, char** argv)
 	Height = h1;
 
 	// Resizing the left image and deleting the original array form the memory
-	ImageL = resize(OriginalImageL, Width, Height, NEW_WIDTH, NEW_HEIGHT);
+	ImageL = resize16(OriginalImageL, Width, Height);
 	free(OriginalImageL);
-
+	Error = lodepng_encode24_file("resized_left.png", ImageL, Width/4, Height/4);
+	if(Error){
+		printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
+		return -1;
+	}
 	// Resizing the right image and deleting the original array form the memory
-	ImageR = resize(OriginalImageR, Width, Height, NEW_WIDTH, NEW_HEIGHT);
+	ImageR = resize16(OriginalImageR, Width, Height);
 	free(OriginalImageR);
-
+	
+	Error = lodepng_encode24_file("resized_right.png", ImageR, Width/4, Height/4);
+	if(Error){
+		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
+		return -1;
+	}
+	free(ImageL);
+	free(ImageR);
 	return 0;
 }
