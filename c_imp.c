@@ -15,16 +15,14 @@ unsigned Width, Height;
 unsigned char* resize16(unsigned char* image, unsigned w, unsigned h)
 {
 	unsigned char* resized = (unsigned char*) malloc(3*w*h/16);
-	resized[0] = image[0];
-	resized[1] = image[1];
-	resized[2] = image[2];
 	int i;
-
-	for (i = 16; i < 4*w*h - 16; i+= 16) {
-		resized[i - 16] = image[i];
-		resized[i + 1 - 16] = image[i + 1];
-		resized[i + 2 - 16] = image[i + 2];
+	for (i = 0; i < w*h; i+= 16) {
+		resized[i/16] = image[i];
+		resized[i/16 + 1] = image[i + 1];
+		resized[i/16 + 2] = image[i + 2];
 	}
+	printf("%d\n", i/16);
+	
 
 	return resized;
 
@@ -68,22 +66,32 @@ int main(int argc, char** argv)
 
 	// Resizing the left image and deleting the original array form the memory
 	ImageL = resize16(OriginalImageL, Width, Height);
-	free(OriginalImageL);
+	
 	Error = lodepng_encode24_file("resized_left.png", ImageL, Width/4, Height/4);
 	if(Error){
 		printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
 		return -1;
 	}
+
+	int i;
 	// Resizing the right image and deleting the original array form the memory
 	ImageR = resize16(OriginalImageR, Width, Height);
-	free(OriginalImageR);
 	
+
+	for(i=0; i < 64; i+=16)
+		printf("%d %d %d %d %d %d\n", 
+			OriginalImageR[i], OriginalImageR[i + 1], OriginalImageR[i + 2], 
+			ImageR[i/16], ImageR[i/16 + 1], ImageR[i/16 + 2]);
+	printf("\n");
+
 	Error = lodepng_encode24_file("resized_right.png", ImageR, Width/4, Height/4);
 	if(Error){
 		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
 		return -1;
 	}
-	free(ImageL);
-	free(ImageR);
+	//free(OriginalImageL);
+	//free(OriginalImageR);
+	//free(ImageL);
+	//free(ImageR);
 	return 0;
 }
