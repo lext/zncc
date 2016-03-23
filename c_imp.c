@@ -15,13 +15,14 @@ unsigned Width, Height;
 unsigned char* resize16(unsigned char* image, unsigned w, unsigned h)
 {
 	unsigned char* resized = (unsigned char*) malloc(3*w*h/16);
-	int i;
-	for (i = 0; i < w*h; i+= 16) {
-		resized[i/16] = image[i];
-		resized[i/16 + 1] = image[i + 1];
-		resized[i/16 + 2] = image[i + 2];
+	int i, j;
+	for (i = 0; i < w/4; i++) {
+	    for(j = 0; j < 3*h/4; j++) {
+		    resized[i*(3*h/4)+j] = 100;
+		    resized[i*(3*h/4)+j+1] = 100;
+		    resized[i*(3*h/4)+j+2] = 200;
+		}
 	}
-	printf("%d\n", i/16);
 	
 
 	return resized;
@@ -76,13 +77,6 @@ int main(int argc, char** argv)
 	int i;
 	// Resizing the right image and deleting the original array form the memory
 	ImageR = resize16(OriginalImageR, Width, Height);
-	
-
-	for(i=0; i < 64; i+=16)
-		printf("%d %d %d %d %d %d\n", 
-			OriginalImageR[i], OriginalImageR[i + 1], OriginalImageR[i + 2], 
-			ImageR[i/16], ImageR[i/16 + 1], ImageR[i/16 + 2]);
-	printf("\n");
 
 	Error = lodepng_encode24_file("resized_right.png", ImageR, Width/4, Height/4);
 	if(Error){
