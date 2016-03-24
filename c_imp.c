@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>
 
 #include "lodepng.h"
 
@@ -122,21 +123,19 @@ unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsig
 
 void normalize_dmap(unsigned char* arr, unsigned w, unsigned h)
 {
-    unsigned char max = -1;
-    unsigned char min = 255;
-    unsigned i;
+    unsigned char max = 0;
+    unsigned char min = UCHAR_MAX;
     int imsize = w*h;
-    float tmp;
-    
-    for (i = 0; i < imsize; i++) {
+
+    for (unsigned i = 0; i < imsize; i++) {
         if (arr[i] > max)
             max = arr[i];
         if (arr[i] < min)
             min = arr[i];
     }
-    for (i = 0; i < imsize; i++) {
-        tmp = arr[i];
-        arr[i] = (unsigned char) (255*(tmp - min)/max);
+
+    for (unsigned i = 0; i < imsize; i++) {
+        arr[i] = (unsigned char) (255*(arr[i] - min)/max);
     }
 }
 
