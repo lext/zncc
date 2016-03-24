@@ -126,15 +126,15 @@ void normalize_dmap(unsigned char* arr, unsigned w, unsigned h)
     unsigned char max = 0;
     unsigned char min = UCHAR_MAX;
     int imsize = w*h;
-
-    for (unsigned i = 0; i < imsize; i++) {
+    unsigned i;
+    for (i = 0; i < imsize; i++) {
         if (arr[i] > max)
             max = arr[i];
         if (arr[i] < min)
             min = arr[i];
     }
 
-    for (unsigned i = 0; i < imsize; i++) {
+    for (i = 0; i < imsize; i++) {
         arr[i] = (unsigned char) (255*(arr[i] - min)/max);
     }
 }
