@@ -16,17 +16,23 @@ unsigned char* resize16(unsigned char* image, unsigned w, unsigned h)
 {
 	unsigned char* resized = (unsigned char*) malloc(3*w*h/16);
 	int i, j;
-	for (i = 0; i < w/4; i++) {
-	    for(j = 0; j < 3*h/4; j++) {
-		    resized[i*(3*h/4)+j] = 100;
-		    resized[i*(3*h/4)+j+1] = 100;
-		    resized[i*(3*h/4)+j+2] = 200;
+	int new_w, new_h;
+    int orig_i, orig_j;
+    new_h = h/4;
+    new_w = w/4;
+    
+	for (i = 0; i < new_h; i++) {
+	    for(j = 0; j < new_w; j++) {
+	        orig_i = (4*i-1*(i > 0));
+	        orig_j = (4*j-1*(j > 0));
+	        
+	        resized[i*(3*new_w)+3*j] = image[orig_i*(4*w)+4*orig_j];
+	        resized[i*(3*new_w)+3*j+1] = image[orig_i*(4*w)+4*orig_j+1];
+	        resized[i*(3*new_w)+3*j+2] = image[orig_i*(4*w)+4*orig_j+2];
 		}
 	}
-	
 
 	return resized;
-
 };
 
 //unsigned char* rgb2gray(unsigned char* image, unsigned w, unsigned h) {
@@ -74,7 +80,6 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	int i;
 	// Resizing the right image and deleting the original array form the memory
 	ImageR = resize16(OriginalImageR, Width, Height);
 
