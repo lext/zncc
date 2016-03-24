@@ -1,81 +1,173 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+
 #include "lodepng.h"
 
-unsigned char* OriginalImageL; // Left image
-unsigned char* OriginalImageR; // Right image
-unsigned char* Disparity;
+#define MAXDISP 65 // Maximum disparity (downscaled)
 
-unsigned char* ImageL; // Left image
-unsigned char* ImageR; // Right image
-
-unsigned Error; // Error code
-unsigned Width, Height;
-
-unsigned char* resize16(unsigned char* image, unsigned w, unsigned h)
-{
-	unsigned char* resized = (unsigned char*) malloc(3*w*h/16);
-	int i, j;
-	int new_w, new_h;
-    int orig_i, orig_j;
-    new_h = h/4;
-    new_w = w/4;
-    
-	for (i = 0; i < new_h; i++) {
-	    for(j = 0; j < new_w; j++) {
-	        orig_i = (4*i-1*(i > 0));
-	        orig_j = (4*j-1*(j > 0));
-	        
-	        resized[i*(3*new_w)+3*j] = image[orig_i*(4*w)+4*orig_j];
-	        resized[i*(3*new_w)+3*j+1] = image[orig_i*(4*w)+4*orig_j+1];
-	        resized[i*(3*new_w)+3*j+2] = image[orig_i*(4*w)+4*orig_j+2];
-		}
-	}
-
-	return resized;
-};
+#define BSX 9 // Window size on X-axis (width)
+#define BSY 9 // Window size on Y-axis (height)
 
 unsigned char* resize16gray(unsigned char* image, unsigned w, unsigned h)
 {
-	unsigned char* resized = (unsigned char*) malloc(w*h/16);
-	int i, j;
-	int new_w, new_h;
-    int orig_i, orig_j;
-    new_h = h/4;
-    new_w = w/4;
+    /* Downscaling and conversion to 8bit grayscale image */
     
+	unsigned char* resized = (unsigned char*) malloc(w*h/16); // Memory pre-allocation for the resized image
+	int i, j; // Indices of the resized image 
+	int new_w=w/4, new_h=h/4; //  Width and hight of the downscaled image
+    int orig_i, orig_j; // Indices of the original image
+    
+    // Iterating through the pixels of the downscaled image
 	for (i = 0; i < new_h; i++) {
-	    for(j = 0; j < new_w; j++) {
-	        orig_i = (4*i-1*(i > 0));
+	    for (j = 0; j < new_w; j++) {
+	        // Calculating corresponding indices in the original image
+	        orig_i = (4*i-1*(i > 0)); 
 	        orig_j = (4*j-1*(j > 0));
+	        // Grayscaling
 	        resized[i*new_w+j] = 0.2126*image[orig_i*(4*w)+4*orig_j]+0.7152*image[orig_i*(4*w)+4*orig_j]+0.0722*image[orig_i*(4*w)+4*orig_j];
 		}
 	}
-
+	
 	return resized;
 };
 
-//unsigned char* rgb2gray(unsigned char* image, unsigned w, unsigned h) {
+unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsigned h, unsigned bsx, unsigned bsy, unsigned maxd)
+{
+    /* Disparity map computation */
+    int imsize = w*h; // Size of the image
+    int bsize = bsx*bsy; // Block size
 
-//}
+    unsigned char* dmap = (unsigned char*) malloc(imsize); // Memory allocation for the disparity map
+    int i, j; // Indices for rows and colums respectively
+    int i_b, j_b; // Indices within the block
+    int ind_l, ind_r; // Indices of block values within the whole image
+    unsigned char d; // Disparity value
+    double cl, cr; // centered values of a pixel in the left and right images;
+    
+    double lbmean, rbmean; // Blocks means for left and right images
+    double lbstd, rbstd; // Left block std, Right block std
+    double current_score; // Current ZNCC value
+    
+    unsigned char best_d;
+    double best_score;
+    
+    for (i = 0; i < h; i++) {
+        for (j = 0; j < w; j++) {
+            // Searching for the best d for the current pixel
+            best_d = maxd;
+            best_score = -1;
+            for (d = 0; d <= maxd; d++) {
+                // Calculating the blocks' means
+                lbmean = 0;
+                rbmean = 0;
+                for (i_b = 0; i_b < bsy; i_b++) {
+                    for (j_b = 0; j_b < bsx; j_b++) {
+                        // Calculatiing indices of the block within the whole image
+                        ind_l = (i+i_b)*w + (j+j_b);
+                        ind_r = (i+i_b-d)*w + (j+j_b);
+                        
+                        // Artificial zero-padding
+                        if ((ind_l < 0) || (ind_l >= imsize))
+                            continue;
+                        if ((ind_r < 0) || (ind_r >= imsize))
+                            continue;
+                        // Updating the blocks' means
+                        lbmean += left[ind_l];
+                        rbmean += right[ind_r];
+                    }
+                }
+                lbmean /= (float) bsize;
+                rbmean /= (float) bsize;
+                
+                // Calculating ZNCC for given value of d
+                lbstd = 0;
+                rbstd = 0;
+                current_score = 0;
+                
+                // Calculating the nomentaor and the standard deviations for the denominator
+                for (i_b = 0; i_b < bsy; i_b++) {
+                    for (j_b = 0; j_b < bsx; j_b++) {
+                        // Calculatiing indices of the block within the whole image
+                        ind_l = (i+i_b)*w + (j+j_b);
+                        ind_r = (i+i_b-d)*w + (j+j_b);
+                        
+                        // Artificial zero-padding
+                        if ((ind_l < 0) || (ind_l >= imsize))
+                            continue;
+                        if ((ind_r < 0) || (ind_r >= imsize))
+                            continue;
+                            
+                        cl = left[ind_l] - lbmean;
+                        cr = right[ind_r] - rbmean;
+                        lbstd += cl*cl;
+                        rbstd += cr*cr;
+                        current_score += cl*cr;
+                    }
+                }
+                // Normalizing the denominator
+                current_score /= sqrt(lbstd)*sqrt(rbstd);
+                // Selecting teh best disparity
+                if (current_score > best_score) {
+                    best_score = current_score;
+                    best_d = d;
+                }
+            }
+            dmap[i*w+j] = best_d;
+        } 
+    }
+    
+    return dmap;
+}
+
+void normalize_dmap(unsigned char* arr, unsigned w, unsigned h)
+{
+    unsigned char max = -1;
+    unsigned char min = 255;
+    unsigned i;
+    int imsize = w*h;
+    float tmp;
+    
+    for (i = 0; i < imsize; i++) {
+        if (arr[i] > max)
+            max = arr[i];
+        if (arr[i] < min)
+            min = arr[i];
+    }
+    for (i = 0; i < imsize; i++) {
+        tmp = arr[i];
+        arr[i] = (unsigned char) (255*(tmp - min)/max);
+    }
+}
+
 
 int main(int argc, char** argv)
 {
+    unsigned char* OriginalImageL; // Left image
+    unsigned char* OriginalImageR; // Right image
+    unsigned char* Disparity;
+
+    unsigned char* ImageL; // Left image
+    unsigned char* ImageR; // Right image
+
+    unsigned Error; // Error code
+    unsigned Width, Height;
+    unsigned w1, h1;
+    unsigned w2, h2;
+    
 	// Chicking whether images names are given
 	if (argc != 3){
 		printf("Specify images names!\n");
 		return -1;
 	}
 
-	// Reading the images to memory
-	unsigned w1, h1;
+	// Reading the images into memory
 	Error = lodepng_decode32_file(&OriginalImageL, &w1, &h1, argv[1]);
 	if(Error) {
 		printf("Error in loading of the left image %u: %s\n", Error, lodepng_error_text(Error));
 		return -1;
 	}
 
-	unsigned w2, h2;
 	Error = lodepng_decode32_file(&OriginalImageR, &w2, &h2, argv[2]);
 	if(Error){
 		printf("Error in loading of the right image %u: %s\n", Error, lodepng_error_text(Error));
@@ -90,43 +182,35 @@ int main(int argc, char** argv)
 
 	Width = w1;
 	Height = h1;
-
-    /* Testing just resize algorithm
+	// Resizing
+    ImageL = resize16gray(OriginalImageL, Width, Height); // Left Image
+    ImageR = resize16gray(OriginalImageR, Width, Height); // Right Image
+    Width = Width/4;
+    Height = Height/4;
     
-	// Resizing the left image and deleting the original array form the memory
-	ImageL = resize16(OriginalImageL, Width, Height);
+    // Calculating the disparity map
+    Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
+	normalize_dmap (Disparity, Width, Height);
 	
-	Error = lodepng_encode24_file("resized_left.png", ImageL, Width/4, Height/4);
-	if(Error){
-		printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
-		return -1;
-	}
-
-	// Resizing the right image and deleting the original array form the memory
-	ImageR = resize16(OriginalImageR, Width, Height);
-
-	Error = lodepng_encode24_file("resized_right.png", ImageR, Width/4, Height/4);
-	if(Error){
-		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
-		return -1;
-	}
-	*/
-	
-	/* Testing rgb2gray resize algorithm */
-	ImageL = resize16gray(OriginalImageL, Width, Height);
-    Error = lodepng_encode_file("resized_left.png", ImageL, Width/4, Height/4, LCT_GREY, 8);
+	// Saving the results
+    Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
 		return -1;
 	}
 	
-    ImageR = resize16gray(OriginalImageR, Width, Height);
-
-	Error = lodepng_encode_file("resized_right.png", ImageR, Width/4, Height/4, LCT_GREY, 8);
+	Error = lodepng_encode_file("resized_right.png", ImageR, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
 		return -1;
 	}
+	
+	Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
+	if(Error){
+		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
+		return -1;
+	}
+	
 	
 	free(OriginalImageL);
 	free(OriginalImageR);
