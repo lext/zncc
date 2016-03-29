@@ -11,7 +11,9 @@
 #define BSX 9 // Window size on X-axis (width)
 #define BSY 9 // Window size on Y-axis (height)
 
-unsigned char* resize16gray(unsigned char* image, unsigned w, unsigned h)
+#define THRESHOLD 8 // Threshold for cross-checking
+
+unsigned char* resize16gray(const unsigned char* image, unsigned w, unsigned h)
 {
     /* Downscaling and conversion to 8bit grayscale image */
     
@@ -34,111 +36,7 @@ unsigned char* resize16gray(unsigned char* image, unsigned w, unsigned h)
 	return resized;
 };
 
-unsigned char* zncc_so_far(unsigned char* left, unsigned char* right, unsigned w, unsigned h, unsigned bsx, unsigned bsy, unsigned maxd)
-{
-    /* Disparity map computation */
-    int imsize = w*h; // Size of the image
-    int bsize = bsx*bsy; // Block size (window size)
-
-    uint16_t win = (bsx - 1) / 2;
-    printf("win: %d", win);
-
-    unsigned char* dmap = (unsigned char*) malloc(imsize); // Memory allocation for the disparity map
-    int i, j; // Indices for rows and colums respectively
-    int i_b, j_b; // Indices within the block
-    int ind_l, ind_r; // Indices of block values within the whole image
-    unsigned char d; // Disparity value
-    double cl, cr; // centered values of a pixel in the left and right images;
-
-    double lbmean, rbmean; // Blocks means for left and right images
-    double lbstd, rbstd; // Left block std, Right block std
-    double current_score; // Current ZNCC value
-
-    unsigned char best_d;
-    double best_score;
-
-    for (i = win; i < h - win; i++) {
-        for (j = win; j < w - win - maxd; j++) {
-            best_d = maxd;
-            best_score = -1;
-            for (d = 0; d < maxd; d++) {
-                lbmean = 0;
-                rbmean = 0;
-                //regionLeft=leftImage(i-win : i+win, j-win : j+win);
-                //regionRight=rightImage(i-win : i+win, j+d-win : j+d+win);
-                //int ccc = 0;
-                for (i_b = i - win; i_b < i + win; i_b++) {
-                    for (j_b = j - win; j_b < j + win; j_b++) {
-                        ind_l = i_b * w + j_b;
-                        ind_r = i_b * w + j_b + d;
-
-                        // Artificial zero-padding
-                        if ((ind_l < 0) || (ind_l >= imsize)) {
-                            printf("Weird1\n");
-                            continue;
-                        }
-                        if ((ind_r < 0) || (ind_r >= imsize)) {
-                            printf("Weird2\n");
-                            continue;
-                        }
-                        // Updating the blocks' means
-                        lbmean += left[ind_l];
-                        rbmean += right[ind_r];
-                        //ccc++;
-                    }
-                }
-                //printf("ccc: %d\n", ccc);
-                lbmean /= bsize;
-                rbmean /= bsize;
-                /*
-                printf("lbmean: %f\n", lbmean);
-                printf("rbmean: %f\n", rbmean);
-                */
-                lbstd = 0;
-                rbstd = 0;
-                current_score = 0;
-
-                // Calculating the nomentaor and the standard deviations for the denominator
-                for (i_b = i - win; i_b < i + win; i_b++) {
-                    for (j_b = j - win; j_b < j + win; j_b++) {
-                        ind_l = i_b * w + j_b;
-                        ind_r = i_b * w + j_b + d;
-
-                        // Artificial zero-padding
-                        if ((ind_l < 0) || (ind_l >= imsize)) {
-                            printf("Weird1__1\n");
-                            continue;
-                        }
-                        if ((ind_r < 0) || (ind_r >= imsize)) {
-                            printf("Weird2__2\n");
-                            continue;
-                        }
-                        cl = left[ind_l] - lbmean;
-                        cr = right[ind_r] - rbmean;
-                        lbstd += cl*cl;
-                        rbstd += cr*cr;
-                        current_score += cl*cr;
-                    }
-                }
-                // Normalizing the denominator
-                current_score /= sqrt(lbstd * rbstd);
-                // Selecting teh best disparity
-                if (current_score > best_score) {
-                    best_score = current_score;
-                    best_d = d;
-                }
-
-            }
-            //printf("d: %d, j: %d, i: %d... Best d: %d\n", d, j, i, best_d);
-            dmap[i*w+j] = best_d;
-        }
-        printf("i:%d\n", i);
-    }
-    printf("Disparity map has been calculated\n");
-    return dmap;
-}
-
-unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsigned h, unsigned bsx, unsigned bsy, unsigned maxd)
+unsigned char* zncc(const unsigned char* left, const unsigned char* right, unsigned w, unsigned h, unsigned bsx, unsigned bsy, unsigned maxd)
 {
     /* Disparity map computation */
     int imsize = w*h; // Size of the image
@@ -186,8 +84,6 @@ unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsig
                 lbmean /= bsize;
                 rbmean /= bsize;
                 
-                //printf("lbmean: %f\n", lbmean);
-                //printf("rbmean: %f\n", rbmean);
                 // Calculating ZNCC for given value of d
                 lbstd = 0;
                 rbstd = 0;
@@ -219,7 +115,7 @@ unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsig
                 }
                 // Normalizing the denominator
                 current_score /= sqrt(lbstd)*sqrt(rbstd);
-                // Selecting teh best disparity
+                // Selecting the best disparity
                 if (current_score > best_score) {
                     best_score = current_score;
                     best_d = d;
@@ -250,7 +146,37 @@ void normalize_dmap(unsigned char* arr, unsigned w, unsigned h)
     }
 }
 
+void cross_checking(const unsigned char* img1, const unsigned char* img2, unsigned char* map, uint32_t imsize, uint32_t threshold) {
+    uint32_t idx;
+    for (idx = 0; idx < imsize; idx++) {
+        if (abs(img1[idx] - img2[idx]) > threshold)
+            map[idx] = 0;
+    }
+}
 
+/*
+unsigned char find_nearest_pxl(unsigned char* map, uint32_t w, uint32_t h, int32_t current_idx) {
+    unsigned char nearest_pxl_value = 0;
+
+}
+
+void oclusion_filling(unsigned char* map, uint32_t mapsize) {
+    int32_t idx;
+    uint16_t replaceTo;
+
+    // Initialization: find the first non-zero element to replace the first zero element with it later
+    while (map[idx] == 0) {
+        if (map[idx] != 0) {
+            replaceTo = map[idx];
+            break;
+        }
+        idx++;
+    }
+
+    // the main procedure: replace
+
+}
+*/
 int main(int argc, char** argv)
 {
     unsigned char* OriginalImageL; // Left image
@@ -301,7 +227,8 @@ int main(int argc, char** argv)
     // Calculating the disparity map
     //Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
     Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
-	normalize_dmap (Disparity, Width, Height);
+    cross_checking(ImageL, ImageR, Disparity, Width * Height, THRESHOLD);
+    normalize_dmap (Disparity, Width, Height);
 	
 	// Saving the results
     Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
