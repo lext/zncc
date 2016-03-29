@@ -3,15 +3,18 @@
 #include <math.h>
 #include <limits.h>
 #include <stdint.h>
-
+#include <stdbool.h>
+#include <omp.h>
 #include "lodepng.h"
 
 #define MAXDISP 65 // Maximum disparity (downscaled)
 
-#define BSX 9 // Window size on X-axis (width)
-#define BSY 9 // Window size on Y-axis (height)
+#define BSX 15 // Window size on X-axis (width)
+#define BSY 15 // Window size on Y-axis (height)
 
-#define THRESHOLD 8 // Threshold for cross-checking
+#define THRESHOLD 28 // Threshold for cross-checking
+
+#define NEIBSIZE 50 // Size of the neighborhood for occlusion-filling
 
 uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 {
@@ -140,47 +143,69 @@ void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
         if (arr[i] < min)
             min = arr[i];
     }
-
+    #pragma omp parallel for
     for (i = 0; i < imsize; i++) {
         arr[i] = (uint8_t) (255*(arr[i] - min)/max);
     }
 }
 
-void cross_checking(const uint8_t* img1, const uint8_t* img2, uint8_t* map, uint32_t imsize, uint32_t threshold) {
+uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsize, uint32_t threshold) {
+    uint8_t* map = (uint8_t*) malloc(imsize); 
     uint32_t idx;
+    #pragma omp parallel for
     for (idx = 0; idx < imsize; idx++) {
-        if (abs(img1[idx] - img2[idx]) > threshold)
+        if (abs(map1[idx] - map2[idx]) > threshold)
             map[idx] = 0;
+        else
+            map[idx] = map1[idx];
     }
+    return map;
 }
 
-/*
-uint8_t find_nearest_pxl(uint8_t* map, uint32_t w, uint32_t h, int32_t current_idx) {
-    uint8_t nearest_pxl_value = 0;
 
-}
+uint8_t* oclusion_filling(uint8_t* map, uint32_t w, uint32_t h, uint32_t bsx, uint32_t bsy) {
+    int32_t imsize = w*h; // Size of the image
 
-void oclusion_filling(uint8_t* map, uint32_t mapsize) {
-    int32_t idx;
-    uint16_t replaceTo;
-
-    // Initialization: find the first non-zero element to replace the first zero element with it later
-    while (map[idx] == 0) {
-        if (map[idx] != 0) {
-            replaceTo = map[idx];
-            break;
+    uint8_t* result = (uint8_t*) malloc(imsize);
+    int32_t i, j; // Indices for rows and colums respectively
+    int32_t i_b, j_b; // Indices within the block
+    int32_t ind_neib; // Index in the nighbourhood
+    bool stop; // Stop flag for nearest neighbor interpolation
+    
+    for (i = 0; i < h; i++) {
+        for (j = 0; j < w; j++) {
+            // If the value of the pixel is zero, perform the occlusion filling by nearest neighbour interpolation
+            result[i*w+j] = map[i*w+j];
+            if(map[i*w+j] == 0) {
+                stop = false;
+                for (i_b = 0; i_b < bsy && !stop; i_b++) {
+                    for (j_b = 0; j_b < bsx && !stop; j_b++) {
+                        // Calculatiing indices of the block within the whole image
+                        ind_neib = (i+i_b)*w + (j+j_b);
+                        // Artificial zero-padding
+                        if ((ind_neib < 0) || (ind_neib >= imsize) || ind_neib == i*w+j) {
+                            continue;
+                        }
+                        // If we meet a nonzero pixel, we interpolate and quite from this loop
+                        if(map[ind_neib] != 0) {
+                            result[i*w+j] = map[ind_neib];
+                            stop = true;
+                            break;
+                        }
+                    }
+                }
+            }
         }
-        idx++;
     }
-
-    // the main procedure: replace
-
+    return result;
 }
-*/
+
 int32_t main(int32_t argc, char** argv)
 {
     uint8_t* OriginalImageL; // Left image
     uint8_t* OriginalImageR; // Right image
+    uint8_t* DisparityLR;
+    uint8_t* DisparityRL;
     uint8_t* Disparity;
 
     uint8_t* ImageL; // Left image
@@ -224,11 +249,22 @@ int32_t main(int32_t argc, char** argv)
     Width = Width/4;
     Height = Height/4;
     
-    // Calculating the disparity map
-    //Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
-    Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
-    //cross_checking(ImageL, ImageR, Disparity, Width * Height, THRESHOLD);
-    normalize_dmap (Disparity, Width, Height);
+    // Calculating the disparity maps
+    printf("Computing maps with zncc...\n");
+    DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
+    DisparityRL = zncc(ImageR, ImageL, Width, Height, BSX, BSY, MAXDISP);
+    // Cross-checking
+    printf("Performing cross-checking...\n");
+    Disparity = cross_checking(DisparityLR, DisparityRL,  Width * Height, THRESHOLD);
+    // Occlusion-filling
+    printf("Performing occlusion-filling...\n");
+    Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE, NEIBSIZE);
+    
+    // Normalization
+    printf("Performing maps normalization...\n");
+    normalize_dmap(DisparityLR, Width, Height);
+    normalize_dmap(DisparityRL, Width, Height);
+    normalize_dmap(Disparity, Width, Height);
 	
 	// Saving the results
     Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
@@ -243,9 +279,20 @@ int32_t main(int32_t argc, char** argv)
 		return -1;
 	}
 	
+	Error = lodepng_encode_file("depthmap_no_post_procLR.png", DisparityLR, Width, Height, LCT_GREY, 8);
+	if(Error){
+		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
+		return -1;
+	}
+	
+	Error = lodepng_encode_file("depthmap_no_post_procRL.png", DisparityRL, Width, Height, LCT_GREY, 8);
+	if(Error){
+		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
+		return -1;
+	}
 	Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
 	if(Error){
-		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
+		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
 		return -1;
 	}
 	
