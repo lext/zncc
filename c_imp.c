@@ -8,13 +8,14 @@
 #include "lodepng.h"
 
 #define MAXDISP 65 // Maximum disparity (downscaled)
+#define MINDISP 0
 
 #define BSX 15 // Window size on X-axis (width)
 #define BSY 15 // Window size on Y-axis (height)
 
-#define THRESHOLD 28 // Threshold for cross-checking
+#define THRESHOLD 8 // Threshold for cross-checking
 
-#define NEIBSIZE 50 // Size of the neighborhood for occlusion-filling
+#define NEIBSIZE 17 // Size of the neighborhood for occlusion-filling
 
 uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 {
@@ -39,7 +40,7 @@ uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 	return resized;
 };
 
-uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, uint32_t bsx, uint32_t bsy, uint32_t maxd)
+uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, uint32_t bsx, uint32_t bsy, int32_t mind, int32_t maxd)
 {
     /* Disparity map computation */
     int32_t imsize = w*h; // Size of the image
@@ -49,14 +50,14 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
     int32_t i, j; // Indices for rows and colums respectively
     int32_t i_b, j_b; // Indices within the block
     int32_t ind_l, ind_r; // Indices of block values within the whole image
-    uint8_t d; // Disparity value
+    int32_t d; // Disparity value
     double_t cl, cr; // centered values of a pixel in the left and right images;
     
     double_t lbmean, rbmean; // Blocks means for left and right images
     double_t lbstd, rbstd; // Left block std, Right block std
     double_t current_score; // Current ZNCC value
     
-    uint8_t best_d;
+    int32_t best_d;
     double_t best_score;
     
     for (i = 0; i < h; i++) {
@@ -64,7 +65,7 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
             // Searching for the best d for the current pixel
             best_d = maxd;
             best_score = -1;
-            for (d = 0; d <= maxd; d++) {
+            for (d = mind; d <= maxd; d++) {
                 // Calculating the blocks' means
                 lbmean = 0;
                 rbmean = 0;
@@ -124,7 +125,7 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
                     best_d = d;
                 }
             }
-            dmap[i*w+j] = best_d;
+            dmap[i*w+j] = (uint8_t) abs(mind - best_d); // Considering both Left to Right and Right to left disparities
         } 
     }
     
@@ -145,16 +146,16 @@ void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
     }
     #pragma omp parallel for
     for (i = 0; i < imsize; i++) {
-        arr[i] = (uint8_t) (255*(arr[i] - min)/max);
+        arr[i] = (uint8_t) (255*(arr[i] - min)/(max-min));
     }
 }
 
-uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsize, uint32_t threshold) {
+uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsize, uint8_t dmax, uint32_t threshold) {
     uint8_t* map = (uint8_t*) malloc(imsize); 
     uint32_t idx;
     #pragma omp parallel for
     for (idx = 0; idx < imsize; idx++) {
-        if (abs(map1[idx] - map2[idx]) > threshold)
+        if (abs((int32_t) map1[idx] - dmax + map2[idx]) > threshold) // Remember about the trick for Rigth to left disprity in zncc!!
             map[idx] = 0;
         else
             map[idx] = map1[idx];
@@ -251,11 +252,11 @@ int32_t main(int32_t argc, char** argv)
     
     // Calculating the disparity maps
     printf("Computing maps with zncc...\n");
-    DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
-    DisparityRL = zncc(ImageR, ImageL, Width, Height, BSX, BSY, MAXDISP);
+    DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
+    DisparityRL = zncc(ImageR, ImageL, Width, Height, BSX, BSY, -MAXDISP, MINDISP);
     // Cross-checking
     printf("Performing cross-checking...\n");
-    Disparity = cross_checking(DisparityLR, DisparityRL,  Width * Height, THRESHOLD);
+    Disparity = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
     // Occlusion-filling
     printf("Performing occlusion-filling...\n");
     Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE, NEIBSIZE);
