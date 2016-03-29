@@ -13,14 +13,14 @@
 
 #define THRESHOLD 8 // Threshold for cross-checking
 
-unsigned char* resize16gray(const unsigned char* image, unsigned w, unsigned h)
+uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 {
     /* Downscaling and conversion to 8bit grayscale image */
     
-	unsigned char* resized = (unsigned char*) malloc(w*h/16); // Memory pre-allocation for the resized image
-	int i, j; // Indices of the resized image 
-    int new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
-    int orig_i, orig_j; // Indices of the original image
+	uint8_t* resized = (uint8_t*) malloc(w*h/16); // Memory pre-allocation for the resized image
+	int32_t i, j; // Indices of the resized image 
+    int32_t new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
+    int32_t orig_i, orig_j; // Indices of the original image
     
     // Iterating through the pixels of the downscaled image
 	for (i = 0; i < new_h; i++) {
@@ -36,25 +36,25 @@ unsigned char* resize16gray(const unsigned char* image, unsigned w, unsigned h)
 	return resized;
 };
 
-unsigned char* zncc(const unsigned char* left, const unsigned char* right, unsigned w, unsigned h, unsigned bsx, unsigned bsy, unsigned maxd)
+uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, uint32_t bsx, uint32_t bsy, uint32_t maxd)
 {
     /* Disparity map computation */
-    int imsize = w*h; // Size of the image
-    int bsize = bsx*bsy; // Block size
+    int32_t imsize = w*h; // Size of the image
+    int32_t bsize = bsx*bsy; // Block size
 
-    unsigned char* dmap = (unsigned char*) malloc(imsize); // Memory allocation for the disparity map
-    int i, j; // Indices for rows and colums respectively
-    int i_b, j_b; // Indices within the block
-    int ind_l, ind_r; // Indices of block values within the whole image
-    unsigned char d; // Disparity value
-    double cl, cr; // centered values of a pixel in the left and right images;
+    uint8_t* dmap = (uint8_t*) malloc(imsize); // Memory allocation for the disparity map
+    int32_t i, j; // Indices for rows and colums respectively
+    int32_t i_b, j_b; // Indices within the block
+    int32_t ind_l, ind_r; // Indices of block values within the whole image
+    uint8_t d; // Disparity value
+    double_t cl, cr; // centered values of a pixel in the left and right images;
     
-    double lbmean, rbmean; // Blocks means for left and right images
-    double lbstd, rbstd; // Left block std, Right block std
-    double current_score; // Current ZNCC value
+    double_t lbmean, rbmean; // Blocks means for left and right images
+    double_t lbstd, rbstd; // Left block std, Right block std
+    double_t current_score; // Current ZNCC value
     
-    unsigned char best_d;
-    double best_score;
+    uint8_t best_d;
+    double_t best_score;
     
     for (i = 0; i < h; i++) {
         for (j = 0; j < w; j++) {
@@ -128,12 +128,12 @@ unsigned char* zncc(const unsigned char* left, const unsigned char* right, unsig
     return dmap;
 }
 
-void normalize_dmap(unsigned char* arr, unsigned w, unsigned h)
+void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
 {
-    unsigned char max = 0;
-    unsigned char min = UCHAR_MAX;
-    int imsize = w*h;
-    unsigned i;
+    uint8_t max = 0;
+    uint8_t min = UCHAR_MAX;
+    int32_t imsize = w*h;
+    uint32_t i;
     for (i = 0; i < imsize; i++) {
         if (arr[i] > max)
             max = arr[i];
@@ -142,11 +142,11 @@ void normalize_dmap(unsigned char* arr, unsigned w, unsigned h)
     }
 
     for (i = 0; i < imsize; i++) {
-        arr[i] = (unsigned char) (255*(arr[i] - min)/max);
+        arr[i] = (uint8_t) (255*(arr[i] - min)/max);
     }
 }
 
-void cross_checking(const unsigned char* img1, const unsigned char* img2, unsigned char* map, uint32_t imsize, uint32_t threshold) {
+void cross_checking(const uint8_t* img1, const uint8_t* img2, uint8_t* map, uint32_t imsize, uint32_t threshold) {
     uint32_t idx;
     for (idx = 0; idx < imsize; idx++) {
         if (abs(img1[idx] - img2[idx]) > threshold)
@@ -155,12 +155,12 @@ void cross_checking(const unsigned char* img1, const unsigned char* img2, unsign
 }
 
 /*
-unsigned char find_nearest_pxl(unsigned char* map, uint32_t w, uint32_t h, int32_t current_idx) {
-    unsigned char nearest_pxl_value = 0;
+uint8_t find_nearest_pxl(uint8_t* map, uint32_t w, uint32_t h, int32_t current_idx) {
+    uint8_t nearest_pxl_value = 0;
 
 }
 
-void oclusion_filling(unsigned char* map, uint32_t mapsize) {
+void oclusion_filling(uint8_t* map, uint32_t mapsize) {
     int32_t idx;
     uint16_t replaceTo;
 
@@ -177,19 +177,19 @@ void oclusion_filling(unsigned char* map, uint32_t mapsize) {
 
 }
 */
-int main(int argc, char** argv)
+int32_t main(int32_t argc, char** argv)
 {
-    unsigned char* OriginalImageL; // Left image
-    unsigned char* OriginalImageR; // Right image
-    unsigned char* Disparity;
+    uint8_t* OriginalImageL; // Left image
+    uint8_t* OriginalImageR; // Right image
+    uint8_t* Disparity;
 
-    unsigned char* ImageL; // Left image
-    unsigned char* ImageR; // Right image
+    uint8_t* ImageL; // Left image
+    uint8_t* ImageR; // Right image
 
-    unsigned Error; // Error code
-    unsigned Width, Height;
-    unsigned w1, h1;
-    unsigned w2, h2;
+    uint32_t Error; // Error code
+    uint32_t Width, Height;
+    uint32_t w1, h1;
+    uint32_t w2, h2;
     
 	// Chicking whether images names are given
 	if (argc != 3){
@@ -227,7 +227,7 @@ int main(int argc, char** argv)
     // Calculating the disparity map
     //Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
     Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
-    cross_checking(ImageL, ImageR, Disparity, Width * Height, THRESHOLD);
+    //cross_checking(ImageL, ImageR, Disparity, Width * Height, THRESHOLD);
     normalize_dmap (Disparity, Width, Height);
 	
 	// Saving the results
