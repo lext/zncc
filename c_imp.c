@@ -6,7 +6,7 @@
 
 #include "lodepng.h"
 
-#define MAXDISP 16 // Maximum disparity (downscaled)
+#define MAXDISP 65 // Maximum disparity (downscaled)
 
 #define BSX 9 // Window size on X-axis (width)
 #define BSY 9 // Window size on Y-axis (height)
@@ -171,7 +171,7 @@ unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsig
                     for (j_b = 0; j_b < bsx; j_b++) {
                         // Calculatiing indices of the block within the whole image
                         ind_l = (i+i_b)*w + (j+j_b);
-                        ind_r = (i+i_b-d)*w + (j+j_b);
+                        ind_r = (i+i_b)*w + (j+j_b-d);
                         
                         // Artificial zero-padding
                         if ((ind_l < 0) || (ind_l >= imsize))
@@ -198,7 +198,7 @@ unsigned char* zncc(unsigned char* left, unsigned char* right, unsigned w, unsig
                     for (j_b = 0; j_b < bsx; j_b++) {
                         // Calculatiing indices of the block within the whole image
                         ind_l = (i+i_b)*w + (j+j_b);
-                        ind_r = (i+i_b-d)*w + (j+j_b);
+                        ind_r = (i+i_b)*w + (j+j_b-d);
                         
                         // Artificial zero-padding
                         if ((ind_l < 0) || (ind_l >= imsize)) {
@@ -300,7 +300,7 @@ int main(int argc, char** argv)
     
     // Calculating the disparity map
     //Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
-    Disparity = zncc_so_far(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
+    Disparity = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MAXDISP);
 	normalize_dmap (Disparity, Width, Height);
 	
 	// Saving the results
