@@ -1,6 +1,6 @@
 all:
 	gcc -c lodepng.c -O3
-	gcc c_imp.c -o zncc lodepng.o -lm -Wall -O3 -fopenmp
+	gcc c_imp.c -o zncc lodepng.o -lm -Wall -O3
 	./zncc im0.png im1.png
 run:
 	./zncc im0.png im1.png

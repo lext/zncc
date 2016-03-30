@@ -4,7 +4,6 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <omp.h>
 #include "lodepng.h"
 
 #define MAXDISP 65 // Maximum disparity (downscaled)
@@ -144,7 +143,7 @@ void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
         if (arr[i] < min)
             min = arr[i];
     }
-    #pragma omp parallel for
+    
     for (i = 0; i < imsize; i++) {
         arr[i] = (uint8_t) (255*(arr[i] - min)/(max-min));
     }
@@ -153,7 +152,7 @@ void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
 uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsize, uint8_t dmax, uint32_t threshold) {
     uint8_t* map = (uint8_t*) malloc(imsize); 
     uint32_t idx;
-    #pragma omp parallel for
+    
     for (idx = 0; idx < imsize; idx++) {
         if (abs((int32_t) map1[idx] - dmax + map2[idx]) > threshold) // Remember about the trick for Rigth to left disprity in zncc!!
             map[idx] = 0;
