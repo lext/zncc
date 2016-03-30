@@ -17,6 +17,17 @@
 
 #define NEIBSIZE 256 // Size of the neighborhood for occlusion-filling
 
+#define FREE_ALL(...) \
+do { \
+    int i=0;\
+    void *pta[] = {__VA_ARGS__}; \
+    for(i=0; i < sizeof(pta)/sizeof(void*); i++) \
+    { \
+        free(pta[i]); \
+    }\
+} while(0)
+
+
 uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 {
     /* Downscaling and conversion to 8bit grayscale image */
@@ -198,58 +209,15 @@ uint8_t* oclusion_filling(const uint8_t* map, uint32_t w, uint32_t h, uint32_t n
     }
     return result;
 }
-/*
-void my_oclusion_filling(uint8_t* map, uint32_t w, uint32_t h, uint32_t nsize) {
-    //int32_t imsize = w*h; // Size of the image
 
-    //uint8_t* result = (uint8_t*) malloc(imsize);
-    int32_t i, j; // Indices for rows and colums respectively
-    int32_t i_b, j_b; // Indices within the block
-    int32_t ind_neib; // Index in the nighbourhood
-    int32_t ext;
-    bool stop; // Stop flag for nearest neighbor interpolation
-
-    for (i = 0; i < h; i++) {
-        for (j = 0; j < w; j++) {
-            // If the value of the pixel is zero, perform the occlusion filling by nearest neighbour interpolation
-            //result[i*w+j] = map[i*w+j];
-            if(map[i*w+j] == 0) {
-
-                 // Spreading search of non-zero pixel in the neighborhood i,j
-                stop = false;
-                for (ext=1; (ext <= nsize/2) && (!stop); ext++) {
-                    for (j_b = -ext; (j_b <= ext) && (!stop); j_b++) {
-                        for (i_b = -ext; (i_b <= ext) && (!stop); i_b++) {
-                            // Cehcking borders
-                            if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || (i_b==0 && j_b==0)) {
-                                continue;
-                            }
-                             // Calculatiing indices of the block within the whole image
-                            ind_neib = (i+i_b)*w + (j+j_b);
-                            //If we meet a nonzero pixel, we interpolate and quite from this loop
-                            if(map[ind_neib] != 0) {
-                                map[i*w+j] = map[ind_neib];
-                                stop = true;
-                                break;
-                            }
-
-                        }
-                    }
-                }
-            }
-       }
-    }
-    //return result;
-}
-*/
 int32_t main(int32_t argc, char** argv)
 {
     uint8_t* OriginalImageL; // Left image
     uint8_t* OriginalImageR; // Right image
     uint8_t* DisparityLR;
     uint8_t* DisparityRL;
+    uint8_t* DisparityLRCC;
     uint8_t* Disparity;
-
     uint8_t* ImageL; // Left image
     uint8_t* ImageR; // Right image
 
@@ -257,7 +225,7 @@ int32_t main(int32_t argc, char** argv)
     uint32_t Width, Height;
     uint32_t w1, h1;
     uint32_t w2, h2;
-    
+    clock_t start, end;
 	// Chicking whether images names are given
 	if (argc != 3){
         printf("Specify images names!\n");
@@ -286,6 +254,7 @@ int32_t main(int32_t argc, char** argv)
 	Width = w1;
 	Height = h1;
 	// Resizing
+	start = clock();
     ImageL = resize16gray(OriginalImageL, Width, Height); // Left Image
     ImageR = resize16gray(OriginalImageR, Width, Height); // Right Image
     Width = Width/4;
@@ -293,103 +262,58 @@ int32_t main(int32_t argc, char** argv)
     
     // Calculating the disparity maps
     printf("Computing maps with zncc...\n");
-    clock_t start = clock();
     DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
-    clock_t end = clock();
-    printf("Elapsed time for calculation L-R disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
-    start = clock();
     DisparityRL = zncc(ImageR, ImageL, Width, Height, BSX, BSY, -MAXDISP, MINDISP);
-    end = clock();
-    printf("Elapsed time for calculation R-L disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
     // Cross-checking
     printf("Performing cross-checking...\n");
-    Disparity = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
+    DisparityLRCC = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
     // Occlusion-filling
     printf("Performing occlusion-filling...\n");
-    Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE);
-    //my_oclusion_filling(Disparity, Width, Height, NEIBSIZE);
-    printf("Performing second occlusion-filling...\n");
-    Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE);
-    //my_oclusion_filling(Disparity, Width, Height, NEIBSIZE);
+    Disparity = oclusion_filling(DisparityLRCC, Width, Height, NEIBSIZE);
     // Normalization
     printf("Performing maps normalization...\n");
+    normalize_dmap(Disparity, Width, Height);
+    end = clock();
+    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
     normalize_dmap(DisparityLR, Width, Height);
     normalize_dmap(DisparityRL, Width, Height);
-    normalize_dmap(Disparity, Width, Height);
+
 	
 	// Saving the results
     Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
-        free(ImageR);
-        free(ImageL);
-        free(Disparity);
-        free(DisparityRL);
-        free(DisparityLR);
-        free(OriginalImageR);
-        free(OriginalImageL);
-        free(ImageR);
+		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
 		return -1;
 	}
 	
 	Error = lodepng_encode_file("resized_right.png", ImageR, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
-        free(ImageR);
-        free(ImageL);
-        free(Disparity);
-        free(DisparityRL);
-        free(DisparityLR);
-        free(OriginalImageR);
-        free(OriginalImageL);
+		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
 	}
 	
 	Error = lodepng_encode_file("depthmap_no_post_procLR.png", DisparityLR, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-        free(ImageR);
-        free(ImageL);
-        free(Disparity);
-        free(DisparityRL);
-        free(DisparityLR);
-        free(OriginalImageR);
-        free(OriginalImageL);
+		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
 	}
 	
 	Error = lodepng_encode_file("depthmap_no_post_procRL.png", DisparityRL, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-        free(ImageR);
-        free(ImageL);
-        free(Disparity);
-        free(DisparityRL);
-        free(DisparityLR);
-        free(OriginalImageR);
-        free(OriginalImageL);
+		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
 	}
 	Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-        free(ImageR);
-        free(ImageL);
-        free(Disparity);
-        free(DisparityRL);
-        free(DisparityLR);
-        free(OriginalImageR);
-        free(OriginalImageL);
+		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
 	}
 	
-	
-    free(ImageR);
-    free(ImageL);
-    free(Disparity);
-    free(DisparityRL);
-    free(DisparityLR);
-    free(OriginalImageR);
-    free(OriginalImageL);
+    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
 	return 0;
 }
