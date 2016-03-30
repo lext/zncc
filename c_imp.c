@@ -6,15 +6,15 @@
 #include <stdbool.h>
 #include "lodepng.h"
 
-#define MAXDISP 65 // Maximum disparity (downscaled)
+#define MAXDISP 64 // Maximum disparity (downscaled)
 #define MINDISP 0
 
-#define BSX 15 // Window size on X-axis (width)
+#define BSX 21 // Window size on X-axis (width)
 #define BSY 15 // Window size on Y-axis (height)
 
-#define THRESHOLD 8 // Threshold for cross-checking
+#define THRESHOLD 2// Threshold for cross-checking
 
-#define NEIBSIZE 17 // Size of the neighborhood for occlusion-filling
+#define NEIBSIZE 256 // Size of the neighborhood for occlusion-filling
 
 uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 {
@@ -39,7 +39,7 @@ uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 	return resized;
 };
 
-uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, uint32_t bsx, uint32_t bsy, int32_t mind, int32_t maxd)
+uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, int32_t bsx, int32_t bsy, int32_t mind, int32_t maxd)
 {
     /* Disparity map computation */
     int32_t imsize = w*h; // Size of the image
@@ -68,17 +68,15 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
                 // Calculating the blocks' means
                 lbmean = 0;
                 rbmean = 0;
-                for (i_b = 0; i_b < bsy; i_b++) {
-                    for (j_b = 0; j_b < bsx; j_b++) {
+                for (i_b = -bsy/2; i_b < bsy/2; i_b++) {
+                    for (j_b = -bsx/2; j_b < bsx/2; j_b++) {
+                        // Borders checking
+                        if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || !(j+j_b-d  >= 0) || !(j+j_b-d < w)) {
+                                continue;
+                        }
                         // Calculatiing indices of the block within the whole image
                         ind_l = (i+i_b)*w + (j+j_b);
                         ind_r = (i+i_b)*w + (j+j_b-d);
-                        
-                        // Artificial zero-padding
-                        if ((ind_l < 0) || (ind_l >= imsize))
-                            continue;
-                        if ((ind_r < 0) || (ind_r >= imsize))
-                            continue;
                         // Updating the blocks' means
                         lbmean += left[ind_l];
                         rbmean += right[ind_r];
@@ -93,21 +91,15 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
                 current_score = 0;
                 
                 // Calculating the nomentaor and the standard deviations for the denominator
-                for (i_b = 0; i_b < bsy; i_b++) {
-                    for (j_b = 0; j_b < bsx; j_b++) {
+                for (i_b = -bsy/2; i_b < bsy/2; i_b++) {
+                    for (j_b = -bsx/2; j_b < bsx/2; j_b++) {
+                        // Borders checking
+                        if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || !(j+j_b-d  >= 0) || !(j+j_b-d < w)) {
+                                continue;
+                        }
                         // Calculatiing indices of the block within the whole image
                         ind_l = (i+i_b)*w + (j+j_b);
                         ind_r = (i+i_b)*w + (j+j_b-d);
-                        
-                        // Artificial zero-padding
-                        if ((ind_l < 0) || (ind_l >= imsize)) {
-                            //printf("Weird_1\n");
-                            continue;
-                        }
-                        if ((ind_r < 0) || (ind_r >= imsize)) {
-                            //printf("Weird_2! ind_r=%d, d=%d, w=%d\n", ind_r, d, w);
-                            continue;
-                        }
                             
                         cl = left[ind_l] - lbmean;
                         cr = right[ind_r] - rbmean;
@@ -124,7 +116,7 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
                     best_d = d;
                 }
             }
-            dmap[i*w+j] = (uint8_t) abs(mind - best_d); // Considering both Left to Right and Right to left disparities
+            dmap[i*w+j] = (uint8_t) abs(best_d); // Considering both Left to Right and Right to left disparities
         } 
     }
     
@@ -154,7 +146,7 @@ uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsiz
     uint32_t idx;
     
     for (idx = 0; idx < imsize; idx++) {
-        if (abs((int32_t) map1[idx] - dmax + map2[idx]) > threshold) // Remember about the trick for Rigth to left disprity in zncc!!
+        if (abs((int32_t) map1[idx] - map2[idx]) > threshold) // Remember about the trick for Rigth to left disprity in zncc!!
             map[idx] = 0;
         else
             map[idx] = map1[idx];
@@ -163,39 +155,45 @@ uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsiz
 }
 
 
-uint8_t* oclusion_filling(uint8_t* map, uint32_t w, uint32_t h, uint32_t bsx, uint32_t bsy) {
+uint8_t* oclusion_filling(uint8_t* map, uint32_t w, uint32_t h, uint32_t nsize) {
     int32_t imsize = w*h; // Size of the image
 
     uint8_t* result = (uint8_t*) malloc(imsize);
     int32_t i, j; // Indices for rows and colums respectively
     int32_t i_b, j_b; // Indices within the block
     int32_t ind_neib; // Index in the nighbourhood
+    int32_t ext;
     bool stop; // Stop flag for nearest neighbor interpolation
-    
+
     for (i = 0; i < h; i++) {
         for (j = 0; j < w; j++) {
             // If the value of the pixel is zero, perform the occlusion filling by nearest neighbour interpolation
             result[i*w+j] = map[i*w+j];
             if(map[i*w+j] == 0) {
+                
+                 // Spreading search of non-zero pixel in the neighborhood i,j
                 stop = false;
-                for (i_b = 0; i_b < bsy && !stop; i_b++) {
-                    for (j_b = 0; j_b < bsx && !stop; j_b++) {
-                        // Calculatiing indices of the block within the whole image
-                        ind_neib = (i+i_b)*w + (j+j_b);
-                        // Artificial zero-padding
-                        if ((ind_neib < 0) || (ind_neib >= imsize) || ind_neib == i*w+j) {
-                            continue;
-                        }
-                        // If we meet a nonzero pixel, we interpolate and quite from this loop
-                        if(map[ind_neib] != 0) {
-                            result[i*w+j] = map[ind_neib];
-                            stop = true;
-                            break;
+                for (ext=1; (ext <= nsize/2) && (!stop); ext++) {
+                    for (j_b = -ext; (j_b <= ext) && (!stop); j_b++) {
+                        for (i_b = -ext; (i_b <= ext) && (!stop); i_b++) {
+                            // Cehcking borders
+                            if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || (i_b==0 && j_b==0)) {
+                                continue;
+                            }
+                             // Calculatiing indices of the block within the whole image
+                            ind_neib = (i+i_b)*w + (j+j_b);
+                            //If we meet a nonzero pixel, we interpolate and quite from this loop
+                            if(map[ind_neib] != 0) {
+                                result[i*w+j] = map[ind_neib];
+                                stop = true;
+                                break;
+                            }
+                                
                         }
                     }
                 }
-            }
-        }
+            }   
+       } 
     }
     return result;
 }
@@ -258,8 +256,9 @@ int32_t main(int32_t argc, char** argv)
     Disparity = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
     // Occlusion-filling
     printf("Performing occlusion-filling...\n");
-    Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE, NEIBSIZE);
-    
+    Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE);
+    printf("Performing second occlusion-filling...\n");
+    Disparity = oclusion_filling(Disparity, Width, Height, NEIBSIZE);
     // Normalization
     printf("Performing maps normalization...\n");
     normalize_dmap(DisparityLR, Width, Height);
