@@ -7,16 +7,28 @@
 #include <time.h>
 #include "lodepng.h"
 
+#ifdef MAC
+#include <OpenCL/cl.h>
+#else
+#include <CL/cl.h>
+#endif
+
+/* ---------------- ZNCC parameters ---------------- */
+
 #define MAXDISP 64 // Maximum disparity (downscaled)
 #define MINDISP 0
-
 #define BSX 21 // Window size on X-axis (width)
 #define BSY 15 // Window size on Y-axis (height)
-
-#define THRESHOLD 2// Threshold for cross-checking
-
+#define THRESHOLD 2// Threshold for cross-checkings
 #define NEIBSIZE 256 // Size of the neighborhood for occlusion-filling
 
+/* ---------------- OpenCL parameters ---------------- */
+#define MAX_PLATFORMS 3
+
+/* ---------------- Macros ---------------- */
+
+// This macros was found somewhere on stackoverflow and it is used to release the memory of
+// several arrays
 #define FREE_ALL(...) \
 do { \
     int i=0;\
@@ -26,6 +38,27 @@ do { \
         free(pta[i]); \
     }\
 } while(0)
+
+// The following macros were adopted from http://svn.clifford.at/tools/trunk/examples/cldemo.c
+#define CL_CHECK(_expr)                                                         \
+   do {                                                                         \
+     cl_int _err = _expr;                                                       \
+     if (_err == CL_SUCCESS)                                                    \
+       break;                                                                   \
+     fprintf(stderr, "OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err);   \
+     abort();                                                                   \
+   } while (0)
+
+#define CL_CHECK_ERR(_expr)                                                     \
+   ({                                                                           \
+     cl_int _err = CL_INVALID_VALUE;                                            \
+     typeof(_expr) _ret = _expr;                                                \
+     if (_err != CL_SUCCESS) {                                                  \
+       fprintf(stderr, "OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
+       abort();                                                                 \
+     }                                                                          \
+     _ret;                                                                      \
+   })
 
 
 uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
@@ -212,6 +245,7 @@ uint8_t* oclusion_filling(const uint8_t* map, uint32_t w, uint32_t h, uint32_t n
 
 int32_t main(int32_t argc, char** argv)
 {
+    // Host variables
     uint8_t* OriginalImageL; // Left image
     uint8_t* OriginalImageR; // Right image
     uint8_t* DisparityLR;
@@ -225,34 +259,90 @@ int32_t main(int32_t argc, char** argv)
     uint32_t Width, Height;
     uint32_t w1, h1;
     uint32_t w2, h2;
+    int i;
+    char buffer[100];
     clock_t start, end;
+
+    // OpenCL-related variables
+    cl_platform_id platforms[MAX_PLATFORMS];
+	cl_uint platforms_n = 0;
+	cl_device_id device;
+	
+	/* ---------------- Reading Images ---------------- */
+	
 	// Checking whether images names are given
-	if (argc != 3){
-        printf("Specify images names!\n");
-		return -1;
+	if (argc != 4){
+        printf("Specify images names and the mode!\n");
+		exit(1);
 	}
 
 	// Reading the images into memory
 	Error = lodepng_decode32_file(&OriginalImageL, &w1, &h1, argv[1]);
 	if(Error) {
         printf("Error in loading of the left image %u: %s\n", Error, lodepng_error_text(Error));
-		return -1;
+		exit(1);
 	}
 
 	Error = lodepng_decode32_file(&OriginalImageR, &w2, &h2, argv[2]);
 	if(Error){
         printf("Error in loading of the right image %u: %s\n", Error, lodepng_error_text(Error));
-		return -1;
+		exit(1);
 	}
 
 	// Checking whether the sizes of images correspond to each other
 	if ((w1 != w2) || (h1 != h2)) {
         printf("The sizes of the images do not match!\n");
-		return -1;
+		exit(1);
 	}
 
 	Width = w1;
 	Height = h1;
+	
+	/* ---------------- Getting info about available CL platforms ---------------- */
+
+	CL_CHECK(clGetPlatformIDs(MAX_PLATFORMS, platforms, &platforms_n));
+	if (platforms_n == 0) {
+	    printf("Can't identify any platform\n");
+		exit(1);
+    }
+	printf("Platforms available: %d \n", platforms_n);
+	printf("==========================\n");
+	for (i=0; i<platforms_n; i++) {
+		printf("Number: %d\n", i+1);
+		
+		CL_CHECK(clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR, sizeof(buffer), buffer, NULL));
+		printf("Vendor= %s\n", buffer);
+		
+		CL_CHECK(clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, sizeof(buffer), buffer, NULL));
+		printf("Name = %s\n", buffer);
+		printf("--------------------------\n");
+	}
+    
+    /* ---------------- Choosing the platform ---------------- */
+    
+    if (platforms_n > 1) {
+        printf("Choose the platform: ");
+        if(!scanf("%d", &i)){
+            printf("Platform input problem\n");
+            exit(1);
+        };
+        printf("==========================\n");
+    }
+    
+    /* ---------------- Choosing the device ---------------- */
+    
+    if(!strcmp(argv[3], "GPU"))
+        CL_CHECK(clGetDeviceIDs(platforms[i-1], CL_DEVICE_TYPE_GPU, 1, &device, NULL));
+    else if(!strcmp(argv[3], "CPU"))
+        CL_CHECK(clGetDeviceIDs(platforms[i-1], CL_DEVICE_TYPE_CPU, 1, &device, NULL));
+    else {
+        printf("Invalid mode! Choose either CPU or GPU!\n");
+        exit(1);
+    }
+	
+    
+	
+	
 	// Resizing
 	start = clock();
     ImageL = resize16gray(OriginalImageL, Width, Height); // Left Image
@@ -280,33 +370,7 @@ int32_t main(int32_t argc, char** argv)
 
 	
 	// Saving the results
-    Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
-	if(Error){
-		printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
-		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-		return -1;
-	}
 	
-	Error = lodepng_encode_file("resized_right.png", ImageR, Width, Height, LCT_GREY, 8);
-	if(Error){
-		printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
-		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-	}
-	
-	Error = lodepng_encode_file("depthmap_no_post_procLR.png", DisparityLR, Width, Height, LCT_GREY, 8);
-	if(Error){
-		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-	}
-	
-	Error = lodepng_encode_file("depthmap_no_post_procRL.png", DisparityRL, Width, Height, LCT_GREY, 8);
-	if(Error){
-		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-	}
 	Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
 	if(Error){
 		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
