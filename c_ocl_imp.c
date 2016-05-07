@@ -268,6 +268,11 @@ int32_t main(int32_t argc, char** argv)
 	cl_uint platforms_n = 0;
 	cl_device_id device;
 	
+	cl_context context;
+    cl_program program;
+    cl_kernel kernel;
+    cl_command_queue queue;
+	
 	/* ---------------- Reading Images ---------------- */
 	
 	// Checking whether images names are given
@@ -339,6 +344,16 @@ int32_t main(int32_t argc, char** argv)
         printf("Invalid mode! Choose either CPU or GPU!\n");
         exit(1);
     }
+    
+    /* Creating the context*/
+    context = clCreateContext(NULL, 1, &device, NULL, NULL, &Error);
+    if(Error < 0) {
+      printf("Couldn't create a context");
+      exit(1);   
+    }
+    
+    
+    
 	
     
 	
