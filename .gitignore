@@ -2,3 +2,4 @@
 lodepng.o
 zncc
 zncc_ocl
+cl-helper.o

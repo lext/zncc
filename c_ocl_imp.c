@@ -6,12 +6,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include "lodepng.h"
-
-#ifdef MAC
-#include <OpenCL/cl.h>
-#else
-#include <CL/cl.h>
-#endif
+#include "cl-helper.h"
 
 /* ---------------- ZNCC parameters ---------------- */
 
@@ -38,27 +33,6 @@ do { \
         free(pta[i]); \
     }\
 } while(0)
-
-// The following macros were adopted from http://svn.clifford.at/tools/trunk/examples/cldemo.c
-#define CL_CHECK(_expr)                                                         \
-   do {                                                                         \
-     cl_int _err = _expr;                                                       \
-     if (_err == CL_SUCCESS)                                                    \
-       break;                                                                   \
-     fprintf(stderr, "OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err);   \
-     abort();                                                                   \
-   } while (0)
-
-#define CL_CHECK_ERR(_expr)                                                     \
-   ({                                                                           \
-     cl_int _err = CL_INVALID_VALUE;                                            \
-     typeof(_expr) _ret = _expr;                                                \
-     if (_err != CL_SUCCESS) {                                                  \
-       fprintf(stderr, "OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
-       abort();                                                                 \
-     }                                                                          \
-     _ret;                                                                      \
-   })
 
 
 uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
@@ -259,20 +233,14 @@ int32_t main(int32_t argc, char** argv)
     uint32_t Width, Height;
     uint32_t w1, h1;
     uint32_t w2, h2;
-    int i;
-    char buffer[100];
     clock_t start, end;
 
-    // OpenCL-related variables
-    cl_platform_id platforms[MAX_PLATFORMS];
-	cl_uint platforms_n = 0;
-	cl_device_id device;
-	
-	cl_context context;
-    cl_program program;
-    cl_kernel kernel;
+	// OpenCL variables
+    cl_context ctx;
     cl_command_queue queue;
-	
+    cl_int status;
+
+
 	/* ---------------- Reading Images ---------------- */
 	
 	// Checking whether images names are given
@@ -303,65 +271,38 @@ int32_t main(int32_t argc, char** argv)
 	Width = w1;
 	Height = h1;
 	
-	/* ---------------- Getting info about available CL platforms ---------------- */
+    /* ---------------- Requesting the device to run the computations ---------------- */
 
-	CL_CHECK(clGetPlatformIDs(MAX_PLATFORMS, platforms, &platforms_n));
-	if (platforms_n == 0) {
-	    printf("Can't identify any platform\n");
-		exit(1);
-    }
-	printf("Platforms available: %d \n", platforms_n);
-	printf("==========================\n");
-	for (i=0; i<platforms_n; i++) {
-		printf("Number: %d\n", i+1);
-		
-		CL_CHECK(clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR, sizeof(buffer), buffer, NULL));
-		printf("Vendor= %s\n", buffer);
-		
-		CL_CHECK(clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, sizeof(buffer), buffer, NULL));
-		printf("Name = %s\n", buffer);
-		printf("--------------------------\n");
-	}
-    
-    /* ---------------- Choosing the platform ---------------- */
-    
-    if (platforms_n > 1) {
-        printf("Choose the platform: ");
-        if(!scanf("%d", &i)){
-            printf("Platform input problem\n");
-            exit(1);
-        };
-        printf("==========================\n");
-    }
-    
-    /* ---------------- Choosing the device ---------------- */
-    
-    if(!strcmp(argv[3], "GPU"))
-        CL_CHECK(clGetDeviceIDs(platforms[i-1], CL_DEVICE_TYPE_GPU, 1, &device, NULL));
-    else if(!strcmp(argv[3], "CPU"))
-        CL_CHECK(clGetDeviceIDs(platforms[i-1], CL_DEVICE_TYPE_CPU, 1, &device, NULL));
-    else {
-        printf("Invalid mode! Choose either CPU or GPU!\n");
-        exit(1);
-    }
-    
-    /* Creating the context*/
-    context = clCreateContext(NULL, 1, &device, NULL, NULL, &Error);
-    if(Error < 0) {
-      printf("Couldn't create a context");
-      exit(1);   
-    }
-    
-    
-    
+    create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
+    print_device_info_from_queue(queue);
+
+    /* ---------------- Creating the kernel from file ---------------- */
 	
-    
+    char *resize_knl_text = read_file("resize16gray.cl");
+    cl_kernel knl = kernel_from_string(ctx, resize_knl_text, "resize16gray", NULL);
 	
-	
+
+    /* ---------------- Device memory allocation ---------------- */
+
+
+    // Source images
+    cl_mem clImageL_s = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height*4, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+
+    cl_mem clImageR_s = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height*4, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+
+    cl_mem clImageL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height/16, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+
+    cl_mem clImageR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height/16, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+
 	// Resizing
 	start = clock();
     ImageL = resize16gray(OriginalImageL, Width, Height); // Left Image
     ImageR = resize16gray(OriginalImageR, Width, Height); // Right Image
+
     Width = Width/4;
     Height = Height/4;
     
@@ -393,6 +334,6 @@ int32_t main(int32_t argc, char** argv)
         return -1;
 	}
 	
-    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, resize_knl_text);
 	return 0;
 }
