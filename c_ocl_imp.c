@@ -268,44 +268,60 @@ int32_t main(int32_t argc, char** argv)
 		exit(1);
 	}
 
-	Width = w1;
-	Height = h1;
+
 	
+
+
     /* ---------------- Requesting the device to run the computations ---------------- */
 
     create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
     print_device_info_from_queue(queue);
-
-    /* ---------------- Creating the kernel from file ---------------- */
-	
-    char *resize_knl_text = read_file("resize16gray.cl");
-    cl_kernel knl = kernel_from_string(ctx, resize_knl_text, "resize16gray", NULL);
 	
 
-    /* ---------------- Device memory allocation ---------------- */
+    /* ---------------- Resizing ---------------- */
+    start = clock();
+    ImageL = resize16gray(OriginalImageL, w1, h1); // Left Image
+    ImageR = resize16gray(OriginalImageR, w1, h1); // Right Image
 
+    Width = w1/4;
+    Height = h1/4;
 
-    // Source images
-    cl_mem clImageL_s = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height*4, 0, &status);
+    printf("%d %d\n", Width, Height);
+    // Creating the kernel from file
+    char *zncc_knl_text = read_file("zncc.cl");
+    cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", NULL);
+
+    cl_mem clImageL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
+    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
+        queue, clImageL, CL_TRUE,  0,
+        Width, ImageL,
+        0, NULL, NULL));
 
-    cl_mem clImageR_s = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height*4, 0, &status);
+    cl_mem clImageR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
+    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
+        queue, clImageR, CL_TRUE,  0,
+        Width, ImageR,
+        0, NULL, NULL));
 
-    cl_mem clImageL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height/16, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
+    // Work group size
+    int wgSize[] = {256, 256};
+    // Number of work groups
+    int numWG[] = {ceil(Width/wgSize[0]), ceil(Height/wgSize[1])};
 
-    cl_mem clImageR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height/16, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
+    // Resizing kernel calls
+    /*
+    SET_6_KERNEL_ARGS(resize_knl, clOriginalImageL, clImageL, w1, w1, Width, Height);
+    CALL_CL_GUARDED(clEnqueueNDRangeKernel,
+            (queue, resize_knl,
+             2, NULL, globWorkItems, wgSize,
+             0, NULL, NULL));
 
-	// Resizing
-	start = clock();
-    ImageL = resize16gray(OriginalImageL, Width, Height); // Left Image
-    ImageR = resize16gray(OriginalImageR, Width, Height); // Right Image
+    CALL_CL_GUARDED(clFinish, (queue));
+    */
 
-    Width = Width/4;
-    Height = Height/4;
-    
+    /*
     // Calculating the disparity maps
     printf("Computing maps with zncc...\n");
     DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
@@ -333,7 +349,7 @@ int32_t main(int32_t argc, char** argv)
 		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
 	}
-	
-    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, resize_knl_text);
+	*/
+    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, zncc_knl_text);
 	return 0;
 }
