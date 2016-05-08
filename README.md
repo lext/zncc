@@ -11,5 +11,7 @@ You can choose the following options:
 * Compile and run OpenCL implementation on GPU: `make cl runclgpu`
 * Compile and run OpenCL implementation on CPU: `make cl runclcpu`
 
-You can also just run already compiled version by removing first argument of teh commands given above.
+You can also just run already compiled version by removing first argument of the commands given above.
+
+If you want to compile all, just type `make all` and the you can use `make runc` etc.
 
