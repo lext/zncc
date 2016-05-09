@@ -273,6 +273,7 @@ int32_t main(int32_t argc, char** argv)
     create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
     print_device_info_from_queue(queue);
 
+    /* ---------------- Memory pre-allocation and copying to the device the initial arrays ---------------- */
 
     cl_mem dOriginalImageL = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
@@ -305,9 +306,9 @@ int32_t main(int32_t argc, char** argv)
 
 
     // Work group size
-    int wgSize[] = {64, 64};
+    const size_t wgSize[] = {12, 15};
     // Global size
-    int globalSize[] = {512, 512};
+    const size_t globalSize[] = {Height, Width};
 
     // Resizing kernel calls
     
@@ -315,13 +316,44 @@ int32_t main(int32_t argc, char** argv)
     
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, resize_knl,
-             2, NULL, globalSize, wgSize,
+             2, NULL, &globalSize, &wgSize,
              0, NULL, NULL));
 
     CALL_CL_GUARDED(clFinish, (queue));
+
+    // Gettin the result
+    ImageL = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
+    ImageR = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
+
+    // Reading back from the device
+    CALL_CL_GUARDED(clEnqueueReadBuffer, (
+        queue, dImageL, CL_TRUE,  0,
+        Width*Height, ImageL,
+        0, NULL, NULL));
+
+    CALL_CL_GUARDED(clEnqueueReadBuffer, (
+        queue, dImageR, CL_TRUE,  0,
+        Width*Height, ImageR,
+        0, NULL, NULL));
+
+
+    // Saving the results
+    Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
+    if(Error){
+        printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
+        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+        return -1;
+    }
     
+    Error = lodepng_encode_file("resized_right.png", ImageR, Width, Height, LCT_GREY, 8);
+    if(Error){
+        printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
+        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+        return -1;
+    }
 
     /*
+
     // Calculating the disparity maps
     printf("Computing maps with zncc...\n");
     DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
@@ -336,21 +368,35 @@ int32_t main(int32_t argc, char** argv)
     printf("Performing maps normalization...\n");
     normalize_dmap(Disparity, Width, Height);
     end = clock();
-    
+    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
     normalize_dmap(DisparityLR, Width, Height);
     normalize_dmap(DisparityRL, Width, Height);
 
-	
-	// Saving the results
-	
-	Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
-	if(Error){
-		printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-		FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+
+    
+    Error = lodepng_encode_file("depthmap_no_post_procLR.png", DisparityLR, Width, Height, LCT_GREY, 8);
+    if(Error){
+        printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
+        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
-	}
-	*/
-    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    }
+    
+    Error = lodepng_encode_file("depthmap_no_post_procRL.png", DisparityRL, Width, Height, LCT_GREY, 8);
+    if(Error){
+        printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
+        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+        return -1;
+    }
+    Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
+    if(Error){
+        printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
+        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+        return -1;
+    }
+    
+    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
+    */
+
     FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, resize_knl_text);
 	return 0;
 }
