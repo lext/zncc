@@ -2,8 +2,7 @@ __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar 
     int i = get_global_id(0);
     int j = get_global_id(1);
 
-    if (i < h && j < w) {
-        /* Disparity map computation */
+    if ((i < h) && (j < w)) {
         int imsize = w*h; // Size of the image
         int bsize = bsx*bsy; // Block size
 
@@ -18,9 +17,9 @@ __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar 
         
         int best_d;
         float best_score;
-        // Performing the search for the pixel (i, j)
 
-       // Searching for the best d for the current pixel
+
+        // Searching for the best d for the current pixel
         best_d = maxd;
         best_score = -1;
         for (d = mind; d <= maxd; d++) {
@@ -49,7 +48,7 @@ __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar 
             rbstd = 0;
             current_score = 0;
             
-            // Calculating the nomentaor and the standard deviations for the denominator
+            // Calculating the numerator and the standard deviations for the denumerator
             for (i_b = -bsy/2; i_b < bsy/2; i_b++) {
                 for (j_b = -bsx/2; j_b < bsx/2; j_b++) {
                     // Borders checking
@@ -68,9 +67,7 @@ __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar 
                 }
             }
             // Normalizing the denominator
-            current_score /= sqrt(lbstd);
-            current_score /= sqrt(rbstd);
-
+            current_score /= sqrt(lbstd)*sqrt(rbstd);
             // Selecting the best disparity
             if (current_score > best_score) {
                 best_score = current_score;

@@ -3,11 +3,12 @@
 __kernel void resize(__global uchar *imageL, __global  uchar *imageR, __global uchar *resizedL, __global  uchar *resizedR, int w, int h) {
 	int i = get_global_id(0);
 	int j = get_global_id(1);
-
-	int new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
-    int orig_i, orig_j; // Indices of the original image
     
-    if (i < h && j < w) {
+    if ((i < h) && (j < w)) {
+
+        int new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
+        int orig_i, orig_j; // Indices of the original image
+
         // Calculating corresponding indices in the original image
         orig_i = (4*i-1*(i > 0)); 
         orig_j = (4*j-1*(j > 0));
