@@ -35,11 +35,10 @@ do { \
 } while(0)
 
 
-uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
+void resize16gray(const uint8_t* imageL, const uint8_t* imageR, uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h)
 {
     /* Downscaling and conversion to 8bit grayscale image */
-    
-	uint8_t* resized = (uint8_t*) malloc(w*h/16); // Memory pre-allocation for the resized image
+
 	int32_t i, j; // Indices of the resized image 
     int32_t new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
     int32_t orig_i, orig_j; // Indices of the original image
@@ -51,11 +50,10 @@ uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 	        orig_i = (4*i-1*(i > 0)); 
 	        orig_j = (4*j-1*(j > 0));
 	        // Grayscaling
-            resized[i*new_w+j] = 0.2126*image[orig_i*(4*w)+4*orig_j]+0.7152*image[orig_i*(4*w)+4*orig_j + 1]+0.0722*image[orig_i*(4*w)+4*orig_j + 2];
+            resizedL[i*new_w+j] = 0.2126*imageL[orig_i*(4*w)+4*orig_j]+0.7152*imageL[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageL[orig_i*(4*w)+4*orig_j + 2];
+            resizedR[i*new_w+j] = 0.2126*imageR[orig_i*(4*w)+4*orig_j]+0.7152*imageR[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageR[orig_i*(4*w)+4*orig_j + 2];
 		}
 	}
-	
-	return resized;
 };
 
 uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, int32_t bsx, int32_t bsy, int32_t mind, int32_t maxd)
@@ -219,7 +217,7 @@ uint8_t* oclusion_filling(const uint8_t* map, uint32_t w, uint32_t h, uint32_t n
 
 int32_t main(int32_t argc, char** argv)
 {
-    // Host variables
+
     uint8_t* OriginalImageL; // Left image
     uint8_t* OriginalImageR; // Right image
     uint8_t* DisparityLR;
@@ -234,92 +232,94 @@ int32_t main(int32_t argc, char** argv)
     uint32_t w1, h1;
     uint32_t w2, h2;
     clock_t start, end;
-
-	// OpenCL variables
+    
+    
+    // OpenCL variables
     cl_context ctx;
     cl_command_queue queue;
     cl_int status;
-
-
-	/* ---------------- Reading Images ---------------- */
-	
+    
 	// Checking whether images names are given
-	if (argc != 4){
-        printf("Specify images names and the mode!\n");
-		exit(1);
+	if (argc != 3){
+        printf("Specify images names!\n");
+		return -1;
 	}
 
 	// Reading the images into memory
 	Error = lodepng_decode32_file(&OriginalImageL, &w1, &h1, argv[1]);
 	if(Error) {
         printf("Error in loading of the left image %u: %s\n", Error, lodepng_error_text(Error));
-		exit(1);
+		return -1;
 	}
 
 	Error = lodepng_decode32_file(&OriginalImageR, &w2, &h2, argv[2]);
 	if(Error){
         printf("Error in loading of the right image %u: %s\n", Error, lodepng_error_text(Error));
-		exit(1);
+		return -1;
 	}
 
 	// Checking whether the sizes of images correspond to each other
 	if ((w1 != w2) || (h1 != h2)) {
         printf("The sizes of the images do not match!\n");
-		exit(1);
+		return -1;
 	}
 
-
-	
-
+	Width = w1/4;
+	Height = h1/4;
+	// Resizing
 
     /* ---------------- Requesting the device to run the computations ---------------- */
 
     create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
     print_device_info_from_queue(queue);
+
+
+    cl_mem dOriginalImageL = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
+        queue, dOriginalImageL, CL_TRUE,  0,
+        Width*Height*16*4, OriginalImageL,
+        0, NULL, NULL));
+
+    cl_mem dOriginalImageR = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
+        queue, dOriginalImageR, CL_TRUE,  0,
+        Width*Height*16*4, OriginalImageR,
+        0, NULL, NULL));
+
+    cl_mem dImageL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+
+    cl_mem dImageR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+
+
 	
-
-    /* ---------------- Resizing ---------------- */
     start = clock();
-    ImageL = resize16gray(OriginalImageL, w1, h1); // Left Image
-    ImageR = resize16gray(OriginalImageR, w1, h1); // Right Image
-
-    Width = w1/4;
-    Height = h1/4;
 
     printf("%d %d\n", Width, Height);
     // Creating the kernel from file
-    char *zncc_knl_text = read_file("zncc.cl");
-    cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", NULL);
+    char *resize_knl_text = read_file("resize.cl");
+    cl_kernel resize_knl = kernel_from_string(ctx, resize_knl_text, "resize", NULL);
 
-    cl_mem clImageL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
-    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
-        queue, clImageL, CL_TRUE,  0,
-        Width, ImageL,
-        0, NULL, NULL));
-
-    cl_mem clImageR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
-    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
-        queue, clImageR, CL_TRUE,  0,
-        Width, ImageR,
-        0, NULL, NULL));
 
     // Work group size
-    int wgSize[] = {256, 256};
-    // Number of work groups
-    int numWG[] = {ceil(Width/wgSize[0]), ceil(Height/wgSize[1])};
+    int wgSize[] = {64, 64};
+    // Global size
+    int globalSize[] = {512, 512};
 
     // Resizing kernel calls
-    /*
-    SET_6_KERNEL_ARGS(resize_knl, clOriginalImageL, clImageL, w1, w1, Width, Height);
+    
+    SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, w1, h1);
+    
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, resize_knl,
-             2, NULL, globWorkItems, wgSize,
+             2, NULL, globalSize, wgSize,
              0, NULL, NULL));
 
     CALL_CL_GUARDED(clFinish, (queue));
-    */
+    
 
     /*
     // Calculating the disparity maps
@@ -336,7 +336,7 @@ int32_t main(int32_t argc, char** argv)
     printf("Performing maps normalization...\n");
     normalize_dmap(Disparity, Width, Height);
     end = clock();
-    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    
     normalize_dmap(DisparityLR, Width, Height);
     normalize_dmap(DisparityRL, Width, Height);
 
@@ -350,6 +350,7 @@ int32_t main(int32_t argc, char** argv)
         return -1;
 	}
 	*/
-    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, zncc_knl_text);
+    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, resize_knl_text);
 	return 0;
 }
