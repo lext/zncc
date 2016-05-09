@@ -2,7 +2,7 @@ all:
 	gcc -std=gnu99 -c lodepng.c -O3
 	gcc -std=gnu99 -c cl-helper.c -O3
 	gcc -std=gnu99 c_imp.c -o zncc lodepng.o -lm -Wall -O3
-	gcc -std=gnu99 c_ocl_imp.c -o zncc_ocl lodepng.o -lm -lOpenCL -Wall -O3
+	gcc -std=gnu99 c_ocl_imp.c -o zncc_ocl cl-helper.o lodepng.o -lm -lOpenCL -Wall -O3
 c:
 	gcc -std=gnu99 -c lodepng.c -O3
 	gcc -std=gnu99 c_imp.c -o zncc lodepng.o -lm  -Wall -O3

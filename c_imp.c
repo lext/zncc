@@ -60,14 +60,14 @@ uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h,
     int32_t i_b, j_b; // Indices within the block
     int32_t ind_l, ind_r; // Indices of block values within the whole image
     int32_t d; // Disparity value
-    double_t cl, cr; // centered values of a pixel in the left and right images;
+    float cl, cr; // centered values of a pixel in the left and right images;
     
-    double_t lbmean, rbmean; // Blocks means for left and right images
-    double_t lbstd, rbstd; // Left block std, Right block std
-    double_t current_score; // Current ZNCC value
+    float lbmean, rbmean; // Blocks means for left and right images
+    float lbstd, rbstd; // Left block std, Right block std
+    float current_score; // Current ZNCC value
     
     int32_t best_d;
-    double_t best_score;
+    float best_score;
     
     for (i = 0; i < h; i++) {
         for (j = 0; j < w; j++) {
