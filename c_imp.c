@@ -256,7 +256,7 @@ int32_t main(int32_t argc, char** argv)
 
     ImageL = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
     ImageR = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
-    resize16gray(OriginalImageL, OriginalImageR, ImageL, ImageR, Width, Height); // Left Image
+    resize16gray(OriginalImageL, OriginalImageR, ImageL, ImageR, Width*4, Height*4); // Left Image
     
     // Calculating the disparity maps
     printf("Computing maps with zncc...\n");
