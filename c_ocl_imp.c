@@ -10,15 +10,13 @@
 
 /* ---------------- ZNCC parameters ---------------- */
 
-#define MAXDISP 64 // Maximum disparity (downscaled)
-#define MINDISP 0
-#define BSX 21 // Window size on X-axis (width)
-#define BSY 15 // Window size on Y-axis (height)
-#define THRESHOLD 2// Threshold for cross-checkings
-#define NEIBSIZE 256 // Size of the neighborhood for occlusion-filling
+int MAXDISP = 64; // Maximum disparity (downscaled)
+int MINDISP = 0;
+int BSX = 21; // Window size on X-axis (width)
+int BSY = 15; // Window size on Y-axis (height)
+int THRESHOLD = 2;// Threshold for cross-checkings
+int NEIBSIZE = 256; // Size of the neighborhood for occlusion-filling
 
-/* ---------------- OpenCL parameters ---------------- */
-#define MAX_PLATFORMS 3
 
 /* ---------------- Macros ---------------- */
 
@@ -154,7 +152,10 @@ void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
     }
     
     for (i = 0; i < imsize; i++) {
-        arr[i] = (uint8_t) (255*(arr[i] - min)/(max-min));
+        if (max-min)
+            arr[i] = (uint8_t) (255*(arr[i] - min)/(max-min));
+        else
+            arr[i] = 0;
     }
 }
 
@@ -232,7 +233,7 @@ int32_t main(int32_t argc, char** argv)
     uint32_t w1, h1;
     uint32_t w2, h2;
     clock_t start, end;
-    
+    int tmp;
     
     // OpenCL variables
     cl_context ctx;
@@ -266,6 +267,8 @@ int32_t main(int32_t argc, char** argv)
 
 	Width = w1/4;
 	Height = h1/4;
+
+
 	// Resizing
 
     /* ---------------- Requesting the device to run the computations ---------------- */
@@ -274,6 +277,14 @@ int32_t main(int32_t argc, char** argv)
     print_device_info_from_queue(queue);
 
     /* ---------------- Memory pre-allocation and copying to the device the initial arrays ---------------- */
+
+
+    // Work group size
+    const size_t wgSize[] = {12, 15};
+    // Global size
+    const size_t globalSize[] = {Height, Width};
+
+    start = clock();
 
     cl_mem dOriginalImageL = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
@@ -295,85 +306,71 @@ int32_t main(int32_t argc, char** argv)
     cl_mem dImageR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
 
+    cl_mem dDisparityLR = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
 
-	
-    start = clock();
+    cl_mem dDisparityRL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
 
-    printf("%d %d\n", Width, Height);
-    // Creating the kernel from file
+    // Creating OpenCL kernels from the corresponding files
     char *resize_knl_text = read_file("resize.cl");
     cl_kernel resize_knl = kernel_from_string(ctx, resize_knl_text, "resize", NULL);
 
+    char *zncc_knl_text = read_file("zncc.cl");
+    cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", NULL);
 
-    // Work group size
-    const size_t wgSize[] = {12, 15};
-    // Global size
-    const size_t globalSize[] = {Height, Width};
 
-    // Resizing kernel calls
+    // Resizing kernel call
     
     SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, w1, h1);
-    
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, resize_knl,
              2, NULL, &globalSize, &wgSize,
              0, NULL, NULL));
 
+    // Disparity LR zncc kernel call
+
+    SET_9_KERNEL_ARGS(zncc_knl, dImageL, dImageR, dDisparityLR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
+    CALL_CL_GUARDED(clEnqueueNDRangeKernel,
+            (queue, zncc_knl,
+             2, NULL, &globalSize, &wgSize,
+             0, NULL, NULL));
+
+    // Disparity RL zncc kernel call
+
+    tmp = MINDISP;
+    MINDISP = -MAXDISP;
+    MAXDISP = tmp;
+
+    
+    SET_9_KERNEL_ARGS(zncc_knl, dImageR, dImageL, dDisparityRL, Width, Height, BSX, BSY, MINDISP, MAXDISP);
+    CALL_CL_GUARDED(clEnqueueNDRangeKernel,
+            (queue, zncc_knl,
+             2, NULL, &globalSize, &wgSize,
+             0, NULL, NULL));
+
+    
+
     CALL_CL_GUARDED(clFinish, (queue));
 
     // Gettin the result
-    ImageL = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
-    ImageR = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
+    DisparityLR = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the disparity LR
+    DisparityRL = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the disparity RL
 
     // Reading back from the device
     CALL_CL_GUARDED(clEnqueueReadBuffer, (
-        queue, dImageL, CL_TRUE,  0,
-        Width*Height, ImageL,
+        queue, dDisparityLR, CL_TRUE,  0,
+        Width*Height, DisparityLR,
         0, NULL, NULL));
-
-    CALL_CL_GUARDED(clEnqueueReadBuffer, (
-        queue, dImageR, CL_TRUE,  0,
-        Width*Height, ImageR,
-        0, NULL, NULL));
-
-
-    // Saving the results
-    Error = lodepng_encode_file("resized_left.png", ImageL, Width, Height, LCT_GREY, 8);
-    if(Error){
-        printf("Error in saving of the left image %u: %s\n", Error, lodepng_error_text(Error));
-        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-    }
     
-    Error = lodepng_encode_file("resized_right.png", ImageR, Width, Height, LCT_GREY, 8);
-    if(Error){
-        printf("Error in saving of the right image %u: %s\n", Error, lodepng_error_text(Error));
-        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-    }
-
-    /*
-
-    // Calculating the disparity maps
-    printf("Computing maps with zncc...\n");
-    DisparityLR = zncc(ImageL, ImageR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
-    DisparityRL = zncc(ImageR, ImageL, Width, Height, BSX, BSY, -MAXDISP, MINDISP);
-    // Cross-checking
-    printf("Performing cross-checking...\n");
-    DisparityLRCC = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
-    // Occlusion-filling
-    printf("Performing occlusion-filling...\n");
-    Disparity = oclusion_filling(DisparityLRCC, Width, Height, NEIBSIZE);
-    // Normalization
-    printf("Performing maps normalization...\n");
-    normalize_dmap(Disparity, Width, Height);
-    end = clock();
-    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    CALL_CL_GUARDED(clEnqueueReadBuffer, (
+        queue, dDisparityRL, CL_TRUE,  0,
+        Width*Height, DisparityRL,
+        0, NULL, NULL));
+        
     normalize_dmap(DisparityLR, Width, Height);
     normalize_dmap(DisparityRL, Width, Height);
 
-
-    
     Error = lodepng_encode_file("depthmap_no_post_procLR.png", DisparityLR, Width, Height, LCT_GREY, 8);
     if(Error){
         printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
@@ -387,15 +384,37 @@ int32_t main(int32_t argc, char** argv)
         FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
     }
+    /*
+
+    // Cross-checking
+    printf("Performing cross-checking...\n");
+    DisparityLRCC = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
+    // Occlusion-filling
+    printf("Performing occlusion-filling...\n");
+    Disparity = oclusion_filling(DisparityLRCC, Width, Height, NEIBSIZE);
+    // Normalization
+    printf("Performing maps normalization...\n");
+    normalize_dmap(Disparity, Width, Height);
+    end = clock();
+
+
+
+
+    /*
+
+
+
+    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    
+
     Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
     if(Error){
         printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
         FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
     }
-    
-    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
     */
+    
 
     FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, resize_knl_text);
 	return 0;
