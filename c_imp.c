@@ -28,11 +28,10 @@ do { \
 } while(0)
 
 
-uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
+void resize16gray(const uint8_t* imageL, const uint8_t* imageR, uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h)
 {
     /* Downscaling and conversion to 8bit grayscale image */
-    
-	uint8_t* resized = (uint8_t*) malloc(w*h/16); // Memory pre-allocation for the resized image
+
 	int32_t i, j; // Indices of the resized image 
     int32_t new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
     int32_t orig_i, orig_j; // Indices of the original image
@@ -44,11 +43,10 @@ uint8_t* resize16gray(const uint8_t* image, uint32_t w, uint32_t h)
 	        orig_i = (4*i-1*(i > 0)); 
 	        orig_j = (4*j-1*(j > 0));
 	        // Grayscaling
-            resized[i*new_w+j] = 0.2126*image[orig_i*(4*w)+4*orig_j]+0.7152*image[orig_i*(4*w)+4*orig_j + 1]+0.0722*image[orig_i*(4*w)+4*orig_j + 2];
+            resizedL[i*new_w+j] = 0.2126*imageL[orig_i*(4*w)+4*orig_j]+0.7152*imageL[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageL[orig_i*(4*w)+4*orig_j + 2];
+            resizedR[i*new_w+j] = 0.2126*imageR[orig_i*(4*w)+4*orig_j]+0.7152*imageR[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageR[orig_i*(4*w)+4*orig_j + 2];
 		}
 	}
-	
-	return resized;
 };
 
 uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, int32_t bsx, int32_t bsy, int32_t mind, int32_t maxd)
@@ -251,14 +249,14 @@ int32_t main(int32_t argc, char** argv)
 		return -1;
 	}
 
-	Width = w1;
-	Height = h1;
+	Width = w1/4;
+	Height = h1/4;
 	// Resizing
 	start = clock();
-    ImageL = resize16gray(OriginalImageL, Width, Height); // Left Image
-    ImageR = resize16gray(OriginalImageR, Width, Height); // Right Image
-    Width = Width/4;
-    Height = Height/4;
+
+    ImageL = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
+    ImageR = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the resized image
+    resize16gray(OriginalImageL, OriginalImageR, ImageL, ImageR, Width, Height); // Left Image
     
     // Calculating the disparity maps
     printf("Computing maps with zncc...\n");
