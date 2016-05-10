@@ -12,10 +12,10 @@
 
 int MAXDISP = 64; // Maximum disparity (downscaled)
 int MINDISP = 0;
-int BSX = 21; // Window size on X-axis (width)
-int BSY = 15; // Window size on Y-axis (height)
-int THRESHOLD = 2;// Threshold for cross-checkings
-int NEIBSIZE = 256; // Size of the neighborhood for occlusion-filling
+const int BSX = 21; // Window size on X-axis (width)
+const int BSY = 15; // Window size on Y-axis (height)
+const int THRESHOLD = 2;// Threshold for cross-checkings
+const int NEIBSIZE = 256; // Size of the neighborhood for occlusion-filling
 
 
 /* ---------------- Macros ---------------- */
@@ -32,111 +32,6 @@ do { \
     }\
 } while(0)
 
-
-void resize16gray(const uint8_t* imageL, const uint8_t* imageR, uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h)
-{
-    /* Downscaling and conversion to 8bit grayscale image */
-
-	int32_t i, j; // Indices of the resized image 
-    int32_t new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
-    int32_t orig_i, orig_j; // Indices of the original image
-    
-    // Iterating through the pixels of the downscaled image
-	for (i = 0; i < new_h; i++) {
-	    for (j = 0; j < new_w; j++) {
-	        // Calculating corresponding indices in the original image
-	        orig_i = (4*i-1*(i > 0)); 
-	        orig_j = (4*j-1*(j > 0));
-	        // Grayscaling
-            resizedL[i*new_w+j] = 0.2126*imageL[orig_i*(4*w)+4*orig_j]+0.7152*imageL[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageL[orig_i*(4*w)+4*orig_j + 2];
-            resizedR[i*new_w+j] = 0.2126*imageR[orig_i*(4*w)+4*orig_j]+0.7152*imageR[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageR[orig_i*(4*w)+4*orig_j + 2];
-		}
-	}
-};
-
-uint8_t* zncc(const uint8_t* left, const uint8_t* right, uint32_t w, uint32_t h, int32_t bsx, int32_t bsy, int32_t mind, int32_t maxd)
-{
-    /* Disparity map computation */
-    int32_t imsize = w*h; // Size of the image
-    int32_t bsize = bsx*bsy; // Block size
-
-    uint8_t* dmap = (uint8_t*) malloc(imsize); // Memory allocation for the disparity map
-    int32_t i, j; // Indices for rows and colums respectively
-    int32_t i_b, j_b; // Indices within the block
-    int32_t ind_l, ind_r; // Indices of block values within the whole image
-    int32_t d; // Disparity value
-    double_t cl, cr; // centered values of a pixel in the left and right images;
-    
-    double_t lbmean, rbmean; // Blocks means for left and right images
-    double_t lbstd, rbstd; // Left block std, Right block std
-    double_t current_score; // Current ZNCC value
-    
-    int32_t best_d;
-    double_t best_score;
-    
-    for (i = 0; i < h; i++) {
-        for (j = 0; j < w; j++) {
-            // Searching for the best d for the current pixel
-            best_d = maxd;
-            best_score = -1;
-            for (d = mind; d <= maxd; d++) {
-                // Calculating the blocks' means
-                lbmean = 0;
-                rbmean = 0;
-                for (i_b = -bsy/2; i_b < bsy/2; i_b++) {
-                    for (j_b = -bsx/2; j_b < bsx/2; j_b++) {
-                        // Borders checking
-                        if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || !(j+j_b-d  >= 0) || !(j+j_b-d < w)) {
-                                continue;
-                        }
-                        // Calculatiing indices of the block within the whole image
-                        ind_l = (i+i_b)*w + (j+j_b);
-                        ind_r = (i+i_b)*w + (j+j_b-d);
-                        // Updating the blocks' means
-                        lbmean += left[ind_l];
-                        rbmean += right[ind_r];
-                    }
-                }
-                lbmean /= bsize;
-                rbmean /= bsize;
-                
-                // Calculating ZNCC for given value of d
-                lbstd = 0;
-                rbstd = 0;
-                current_score = 0;
-                
-                // Calculating the nomentaor and the standard deviations for the denominator
-                for (i_b = -bsy/2; i_b < bsy/2; i_b++) {
-                    for (j_b = -bsx/2; j_b < bsx/2; j_b++) {
-                        // Borders checking
-                        if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || !(j+j_b-d  >= 0) || !(j+j_b-d < w)) {
-                                continue;
-                        }
-                        // Calculatiing indices of the block within the whole image
-                        ind_l = (i+i_b)*w + (j+j_b);
-                        ind_r = (i+i_b)*w + (j+j_b-d);
-                            
-                        cl = left[ind_l] - lbmean;
-                        cr = right[ind_r] - rbmean;
-                        lbstd += cl*cl;
-                        rbstd += cr*cr;
-                        current_score += cl*cr;
-                    }
-                }
-                // Normalizing the denominator
-                current_score /= sqrt(lbstd)*sqrt(rbstd);
-                // Selecting the best disparity
-                if (current_score > best_score) {
-                    best_score = current_score;
-                    best_d = d;
-                }
-            }
-            dmap[i*w+j] = (uint8_t) abs(best_d); // Considering both Left to Right and Right to left disparities
-        } 
-    }
-    
-    return dmap;
-}
 
 void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
 {
@@ -159,79 +54,18 @@ void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
     }
 }
 
-uint8_t* cross_checking(const uint8_t* map1, const uint8_t* map2, uint32_t imsize, uint8_t dmax, uint32_t threshold) {
-    uint8_t* map = (uint8_t*) malloc(imsize); 
-    uint32_t idx;
-    
-    for (idx = 0; idx < imsize; idx++) {
-        if (abs((int32_t) map1[idx] - map2[idx]) > threshold) // Remember about the trick for Rigth to left disprity in zncc!!
-            map[idx] = 0;
-        else
-            map[idx] = map1[idx];
-    }
-    return map;
-}
-
-
-uint8_t* oclusion_filling(const uint8_t* map, uint32_t w, uint32_t h, uint32_t nsize) {
-    int32_t imsize = w*h; // Size of the image
-
-    uint8_t* result = (uint8_t*) malloc(imsize);
-    int32_t i, j; // Indices for rows and colums respectively
-    int32_t i_b, j_b; // Indices within the block
-    int32_t ind_neib; // Index in the nighbourhood
-    int32_t ext;
-    bool stop; // Stop flag for nearest neighbor interpolation
-
-    for (i = 0; i < h; i++) {
-        for (j = 0; j < w; j++) {
-            // If the value of the pixel is zero, perform the occlusion filling by nearest neighbour interpolation
-            result[i*w+j] = map[i*w+j];
-            if(map[i*w+j] == 0) {
-                
-                 // Spreading search of non-zero pixel in the neighborhood i,j
-                stop = false;
-                for (ext=1; (ext <= nsize/2) && (!stop); ext++) {
-                    for (j_b = -ext; (j_b <= ext) && (!stop); j_b++) {
-                        for (i_b = -ext; (i_b <= ext) && (!stop); i_b++) {
-                            // Cehcking borders
-                            if (!(i+i_b >= 0) || !(i+i_b < h) || !(j+j_b >= 0) || !(j+j_b < w) || (i_b==0 && j_b==0)) {
-                                continue;
-                            }
-                             // Calculatiing indices of the block within the whole image
-                            ind_neib = (i+i_b)*w + (j+j_b);
-                            //If we meet a nonzero pixel, we interpolate and quite from this loop
-                            if(map[ind_neib] != 0) {
-                                result[i*w+j] = map[ind_neib];
-                                stop = true;
-                                break;
-                            }
-                                
-                        }
-                    }
-                }
-            }   
-       } 
-    }
-    return result;
-}
-
 int32_t main(int32_t argc, char** argv)
 {
 
     uint8_t* OriginalImageL; // Left image
     uint8_t* OriginalImageR; // Right image
-    uint8_t* DisparityLR;
-    uint8_t* DisparityRL;
-    uint8_t* DisparityLRCC;
     uint8_t* Disparity;
-    uint8_t* ImageL; // Left image
-    uint8_t* ImageR; // Right image
 
     uint32_t Error; // Error code
     uint32_t Width, Height;
     uint32_t w1, h1;
     uint32_t w2, h2;
+    uint32_t imsize;
     clock_t start, end;
     int tmp;
     
@@ -267,7 +101,7 @@ int32_t main(int32_t argc, char** argv)
 
 	Width = w1/4;
 	Height = h1/4;
-
+    imsize = Width*Height;
 
 	// Resizing
 
@@ -280,9 +114,13 @@ int32_t main(int32_t argc, char** argv)
 
 
     // Work group size
-    const size_t wgSize[] = {12, 15};
+    const size_t wgSize[] = {21, 21};
     // Global size
     const size_t globalSize[] = {Height, Width};
+
+    const size_t wgSize1D[] = {21*21};
+    // Global size
+    const size_t globalSize1D[] = {Height*Width};
 
     start = clock();
 
@@ -311,6 +149,12 @@ int32_t main(int32_t argc, char** argv)
 
     cl_mem dDisparityRL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
+    
+    cl_mem dDisparityLRCC = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
+    
+    cl_mem dDisparity = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
+    CHECK_CL_ERROR(status, "clCreateBuffer");
 
     // Creating OpenCL kernels from the corresponding files
     char *resize_knl_text = read_file("resize.cl");
@@ -318,10 +162,14 @@ int32_t main(int32_t argc, char** argv)
 
     char *zncc_knl_text = read_file("zncc.cl");
     cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", NULL);
-
+    
+    char *cross_check_knl_text = read_file("cross_check.cl");
+    cl_kernel cross_check_knl = kernel_from_string(ctx, cross_check_knl_text, "cross_check", NULL);
+    
+    char *occlusion_knl_text = read_file("occlusion.cl");
+    cl_kernel occlusion_knl = kernel_from_string(ctx, occlusion_knl_text, "occlusion", NULL);
 
     // Resizing kernel call
-    
     SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, w1, h1);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, resize_knl,
@@ -329,7 +177,6 @@ int32_t main(int32_t argc, char** argv)
              0, NULL, NULL));
 
     // Disparity LR zncc kernel call
-
     SET_9_KERNEL_ARGS(zncc_knl, dImageL, dImageR, dDisparityLR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, zncc_knl,
@@ -337,85 +184,48 @@ int32_t main(int32_t argc, char** argv)
              0, NULL, NULL));
 
     // Disparity RL zncc kernel call
-
     tmp = MINDISP;
     MINDISP = -MAXDISP;
     MAXDISP = tmp;
-
-    
     SET_9_KERNEL_ARGS(zncc_knl, dImageR, dImageL, dDisparityRL, Width, Height, BSX, BSY, MINDISP, MAXDISP);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, zncc_knl,
              2, NULL, &globalSize, &wgSize,
              0, NULL, NULL));
-
+    // Cross checking
+    SET_5_KERNEL_ARGS(cross_check_knl, dDisparityLR, dDisparityRL, dDisparityLRCC, imsize, THRESHOLD);
+    CALL_CL_GUARDED(clEnqueueNDRangeKernel,
+            (queue, cross_check_knl,
+             1, NULL, &globalSize1D, &wgSize1D,
+             0, NULL, NULL));
+    // occlusion filling
+    SET_5_KERNEL_ARGS(occlusion_knl, dDisparityLRCC, dDisparity, Width, Height, NEIBSIZE);
+    CALL_CL_GUARDED(clEnqueueNDRangeKernel,
+            (queue, occlusion_knl,
+             2, NULL, &globalSize, &wgSize,
+             0, NULL, NULL));
     
-
     CALL_CL_GUARDED(clFinish, (queue));
-
-    // Gettin the result
-    DisparityLR = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the disparity LR
-    DisparityRL = (uint8_t*) malloc(Width*Height); // Memory pre-allocation for the disparity RL
-
-    // Reading back from the device
-    CALL_CL_GUARDED(clEnqueueReadBuffer, (
-        queue, dDisparityLR, CL_TRUE,  0,
-        Width*Height, DisparityLR,
-        0, NULL, NULL));
     
+    Disparity = (uint8_t*) malloc(Width*Height); 
     CALL_CL_GUARDED(clEnqueueReadBuffer, (
-        queue, dDisparityRL, CL_TRUE,  0,
-        Width*Height, DisparityRL,
+        queue, dDisparity, CL_TRUE,  0,
+        Width*Height, Disparity,
         0, NULL, NULL));
         
-    normalize_dmap(DisparityLR, Width, Height);
-    normalize_dmap(DisparityRL, Width, Height);
-
-    Error = lodepng_encode_file("depthmap_no_post_procLR.png", DisparityLR, Width, Height, LCT_GREY, 8);
-    if(Error){
-        printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-    }
-    
-    Error = lodepng_encode_file("depthmap_no_post_procRL.png", DisparityRL, Width, Height, LCT_GREY, 8);
-    if(Error){
-        printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
-        return -1;
-    }
-    /*
-
-    // Cross-checking
-    printf("Performing cross-checking...\n");
-    DisparityLRCC = cross_checking(DisparityLR, DisparityRL,  Width * Height, MAXDISP, THRESHOLD);
-    // Occlusion-filling
-    printf("Performing occlusion-filling...\n");
-    Disparity = oclusion_filling(DisparityLRCC, Width, Height, NEIBSIZE);
-    // Normalization
-    printf("Performing maps normalization...\n");
     normalize_dmap(Disparity, Width, Height);
     end = clock();
-
-
-
-
-    /*
-
-
-
+    
     printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
     
 
     Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
     if(Error){
         printf("Error in saving of the disparity %u: %s\n", Error, lodepng_error_text(Error));
-        FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC);
         return -1;
-    }
-    */
-    
+    }   
 
-    FREE_ALL(OriginalImageR, OriginalImageL, ImageR, ImageL, Disparity, DisparityLR, DisparityRL, DisparityLRCC, resize_knl_text);
+    
+    FREE_ALL(OriginalImageR, OriginalImageL, resize_knl_text);
 	return 0;
 }
