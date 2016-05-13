@@ -75,7 +75,7 @@ int32_t main(int32_t argc, char** argv)
     cl_int status;
     
 	// Checking whether images names are given
-	if (argc != 3){
+	if (argc != 7){
         printf("Specify images names!\n");
 		return -1;
 	}
@@ -102,7 +102,10 @@ int32_t main(int32_t argc, char** argv)
 	Width = w1/4;
 	Height = h1/4;
     imsize = Width*Height;
-
+    char *resize_knl_text = read_file("resize.cl");
+    char *zncc_knl_text = read_file("zncc.cl");
+    char *cross_check_knl_text = read_file("cross_check.cl");
+    char *occlusion_knl_text = read_file("occlusion.cl");
 	// Resizing
 
     /* ---------------- Requesting the device to run the computations ---------------- */
@@ -114,15 +117,13 @@ int32_t main(int32_t argc, char** argv)
 
 
     // Work group size
-    const size_t wgSize[] = {21, 21};
+    const size_t wgSize[] = {atoi(argv[3]), atoi(argv[4])};
     // Global size
-    const size_t globalSize[] = {Height, Width};
+    const size_t globalSize[] = {atoi(argv[5]), atoi(argv[6])};
 
-    const size_t wgSize1D[] = {21*21};
+    const size_t wgSize1D[] = {wgSize[0]*wgSize[1]};
     // Global size
-    const size_t globalSize1D[] = {Height*Width};
-
-    start = clock();
+    const size_t globalSize1D[] = {globalSize[0]*globalSize[1]};
 
     cl_mem dOriginalImageL = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
@@ -157,17 +158,12 @@ int32_t main(int32_t argc, char** argv)
     CHECK_CL_ERROR(status, "clCreateBuffer");
 
     // Creating OpenCL kernels from the corresponding files
-    char *resize_knl_text = read_file("resize.cl");
     cl_kernel resize_knl = kernel_from_string(ctx, resize_knl_text, "resize", NULL);
-
-    char *zncc_knl_text = read_file("zncc.cl");
     cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", NULL);
-    
-    char *cross_check_knl_text = read_file("cross_check.cl");
     cl_kernel cross_check_knl = kernel_from_string(ctx, cross_check_knl_text, "cross_check", NULL);
-    
-    char *occlusion_knl_text = read_file("occlusion.cl");
     cl_kernel occlusion_knl = kernel_from_string(ctx, occlusion_knl_text, "occlusion", NULL);
+
+    start = clock();
 
     // Resizing kernel call
     SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, w1, h1);
@@ -216,7 +212,7 @@ int32_t main(int32_t argc, char** argv)
     normalize_dmap(Disparity, Width, Height);
     end = clock();
     
-    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    printf("Elapsed time for calculation of the final disparity map: %.4lf s.\n", (double)(end - start) / CLOCKS_PER_SEC);
     
 
     Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);

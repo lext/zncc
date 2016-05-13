@@ -272,7 +272,7 @@ int32_t main(int32_t argc, char** argv)
     printf("Performing maps normalization...\n");
     normalize_dmap(Disparity, Width, Height);
     end = clock();
-    printf("Elapsed time for calculation of the final disparity map: %.2f s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    printf("Elapsed time for calculation of the final disparity map: %.4lf s.\n", (double)(end - start) / CLOCKS_PER_SEC);
     normalize_dmap(DisparityLR, Width, Height);
     normalize_dmap(DisparityRL, Width, Height);
 
