@@ -1,6 +1,8 @@
 #! /bin/bash
 echo "Running benchmarks with 1024 x 1024 grid and workgroups having size power of 2"
 export OUT_DEVINFO=0
+export CL_HELPER_NO_COMPILER_OUTPUT_NAG=1
+
 ./zncc img0.png im1.png 8 8 1024 1024
 ./zncc img0.png im1.png 8 8 1024 1024
 ./zncc img0.png im1.png 8 8 1024 1024
@@ -54,7 +56,8 @@ echo "Running benchmarks with Height x Width grid"
 ./zncc img0.png im1.png 21 15 504 735
 ./zncc img0.png im1.png 21 21 504 735
 
-
+export OUT_DEVINFO=1
+export CL_HELPER_NO_COMPILER_OUTPUT_NAG=0
 
 
 

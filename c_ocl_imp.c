@@ -32,6 +32,9 @@ do { \
     }\
 } while(0)
 
+#ifndef OUT_DEVINFO
+    #define OUT_DEVINFO 1
+#endif
 
 void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
 {
@@ -111,7 +114,8 @@ int32_t main(int32_t argc, char** argv)
     /* ---------------- Requesting the device to run the computations ---------------- */
 
     create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
-    print_device_info_from_queue(queue);
+    if (OUT_DEVINFO)
+        print_device_info_from_queue(queue);
 
     /* ---------------- Memory pre-allocation and copying to the device the initial arrays ---------------- */
 
