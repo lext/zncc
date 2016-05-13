@@ -169,14 +169,14 @@ int32_t main(int32_t argc, char** argv)
     SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, w1, h1);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, resize_knl,
-             2, NULL, &globalSize, &wgSize,
+             2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
              0, NULL, NULL));
 
     // Disparity LR zncc kernel call
     SET_9_KERNEL_ARGS(zncc_knl, dImageL, dImageR, dDisparityLR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, zncc_knl,
-             2, NULL, &globalSize, &wgSize,
+             2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
              0, NULL, NULL));
 
     // Disparity RL zncc kernel call
@@ -186,19 +186,19 @@ int32_t main(int32_t argc, char** argv)
     SET_9_KERNEL_ARGS(zncc_knl, dImageR, dImageL, dDisparityRL, Width, Height, BSX, BSY, MINDISP, MAXDISP);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, zncc_knl,
-             2, NULL, &globalSize, &wgSize,
+             2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
              0, NULL, NULL));
     // Cross checking
     SET_5_KERNEL_ARGS(cross_check_knl, dDisparityLR, dDisparityRL, dDisparityLRCC, imsize, THRESHOLD);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, cross_check_knl,
-             1, NULL, &globalSize1D, &wgSize1D,
+             1, NULL, (const size_t*)&globalSize1D, (const size_t*)&wgSize1D,
              0, NULL, NULL));
     // occlusion filling
     SET_5_KERNEL_ARGS(occlusion_knl, dDisparityLRCC, dDisparity, Width, Height, NEIBSIZE);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, occlusion_knl,
-             2, NULL, &globalSize, &wgSize,
+             2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
              0, NULL, NULL));
     
     CALL_CL_GUARDED(clFinish, (queue));
