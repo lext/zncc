@@ -32,9 +32,6 @@ do { \
     }\
 } while(0)
 
-#ifndef OUT_DEVINFO
-    #define OUT_DEVINFO 1
-#endif
 
 void normalize_dmap(uint8_t* arr, uint32_t w, uint32_t h)
 {
@@ -71,6 +68,10 @@ int32_t main(int32_t argc, char** argv)
     uint32_t imsize;
     clock_t start, end;
     int tmp;
+    const char* OUT_DEVINFO = getenv("OUT_DEVINFO");
+    const char* CL_PLAT = getenv("CL_PLAT");
+    const char* CL_DEVICE = getenv("CL_DEVICE");
+
     
     // OpenCL variables
     cl_context ctx;
@@ -79,7 +80,7 @@ int32_t main(int32_t argc, char** argv)
     
 	// Checking whether images names are given
 	if (argc != 7){
-        printf("Specify images names!\n");
+        printf("Correct number of args! Expected 6, given %d.\n", argc-1);
 		return -1;
 	}
 
@@ -112,8 +113,10 @@ int32_t main(int32_t argc, char** argv)
 	// Resizing
 
     /* ---------------- Requesting the device to run the computations ---------------- */
-
-    create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
+    if(!CL_PLAT || !CL_DEVICE)
+        create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
+    else
+        create_context_on(CL_PLAT, CL_DEVICE, 0, &ctx, &queue, 0);
     if (OUT_DEVINFO)
         print_device_info_from_queue(queue);
 
@@ -216,7 +219,7 @@ int32_t main(int32_t argc, char** argv)
     normalize_dmap(Disparity, Width, Height);
     end = clock();
     
-    printf("Elapsed time for calculation of the final disparity map: %.4lf s.\n", (double)(end - start) / CLOCKS_PER_SEC);
+    printf("Grid size: %d %d. Work Group size: %d %d, Elapsed time: %.4lf s.\n", (int) globalSize[0], (int) globalSize[1], (int) wgSize[0], (int) wgSize[1], (double)(end - start) / CLOCKS_PER_SEC);
     
 
     Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
