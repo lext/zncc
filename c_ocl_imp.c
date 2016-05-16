@@ -125,6 +125,7 @@ int32_t main(int32_t argc, char** argv)
 
     // Work group size
     const size_t wgSize[] = {atoi(argv[3]), atoi(argv[4])};
+
     // Global size
     const size_t globalSize[] = {atoi(argv[5]), atoi(argv[6])};
 
@@ -229,6 +230,25 @@ int32_t main(int32_t argc, char** argv)
     }   
 
     
-    FREE_ALL(OriginalImageR, OriginalImageL, resize_knl_text);
+    FREE_ALL(OriginalImageR, OriginalImageL, Disparity, \
+        resize_knl_text, zncc_knl_text, cross_check_knl_text, occlusion_knl_text);
+
+    CALL_CL_GUARDED(clReleaseKernel, (resize_knl));
+    CALL_CL_GUARDED(clReleaseKernel, (zncc_knl));
+    CALL_CL_GUARDED(clReleaseKernel, (cross_check_knl));
+    CALL_CL_GUARDED(clReleaseKernel, (occlusion_knl));
+
+    CALL_CL_GUARDED(clReleaseCommandQueue, (queue));
+    CALL_CL_GUARDED(clReleaseContext, (ctx));
+
+    CALL_CL_GUARDED(clReleaseMemObject, (dOriginalImageL));
+    CALL_CL_GUARDED(clReleaseMemObject, (dOriginalImageR));
+    CALL_CL_GUARDED(clReleaseMemObject, (dImageL));
+    CALL_CL_GUARDED(clReleaseMemObject, (dImageR));
+    CALL_CL_GUARDED(clReleaseMemObject, (dDisparityLR));
+    CALL_CL_GUARDED(clReleaseMemObject, (dDisparityRL));
+    CALL_CL_GUARDED(clReleaseMemObject, (dDisparityLRCC));
+    CALL_CL_GUARDED(clReleaseMemObject, (dDisparity));
+
 	return 0;
 }
