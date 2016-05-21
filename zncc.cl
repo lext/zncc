@@ -1,7 +1,7 @@
 __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar *dmap, int w, int h, int bsx, int bsy, int mind, int maxd) {
     int i = get_global_id(0);
     int j = get_global_id(1);
-
+    if (i < h && j < w){
     int imsize = w*h; // Size of the image
     int bsize = bsx*bsy; // Block size
 
@@ -74,5 +74,5 @@ __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar 
         }
     }
     dmap[i*w+j] = (uint) abs(best_d); // Considering both Left to Right and Right to left disparities
-
+}
 }

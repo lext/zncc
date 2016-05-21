@@ -166,10 +166,10 @@ int32_t main(int32_t argc, char** argv)
     CHECK_CL_ERROR(status, "clCreateBuffer");
 
     // Creating OpenCL kernels from the corresponding files
-    cl_kernel resize_knl = kernel_from_string(ctx, resize_knl_text, "resize", "-cl-mad-enable -cl-fast-relaxed-math");
-    cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", "-cl-mad-enable -cl-fast-relaxed-math");
-    cl_kernel cross_check_knl = kernel_from_string(ctx, cross_check_knl_text, "cross_check", "-cl-mad-enable -cl-fast-relaxed-math");
-    cl_kernel occlusion_knl = kernel_from_string(ctx, occlusion_knl_text, "occlusion", "-cl-mad-enable -cl-fast-relaxed-math");
+    cl_kernel resize_knl = kernel_from_string(ctx, resize_knl_text, "resize", NULL);
+    cl_kernel zncc_knl = kernel_from_string(ctx, zncc_knl_text, "zncc", NULL);
+    cl_kernel cross_check_knl = kernel_from_string(ctx, cross_check_knl_text, "cross_check", NULL);
+    cl_kernel occlusion_knl = kernel_from_string(ctx, occlusion_knl_text, "occlusion", NULL);
 
     start = clock();
 

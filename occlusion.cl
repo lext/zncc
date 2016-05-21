@@ -1,7 +1,7 @@
 __kernel void occlusion(__global uchar* map, __global uchar* result, uint w, uint h, uint nsize) {
     int i = get_global_id(0);
     int j = get_global_id(1);
-    
+    if (i < h && j < w){
         int imsize = w*h; // Size of the image
         int i_b, j_b; // Indices within the block
         int ind_neib; // Index in the nighbourhood
@@ -34,5 +34,5 @@ __kernel void occlusion(__global uchar* map, __global uchar* result, uint w, uin
                 }
             }
         }   
-
+}
 }
