@@ -8,4 +8,5 @@ depthmap_no_post_procLR.png
 depthmap_no_post_procRL.png
 resized_left.png
 resized_right.png
-
+Report/*.aux
+Report/*.log
