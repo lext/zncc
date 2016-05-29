@@ -6,6 +6,8 @@
  \usepackage{graphicx}
 \usepackage{algorithm, algorithmic}
 \usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{url}
 \usepackage{listings}
 \lstset{basicstyle=\ttfamily,
   showstringspaces=false,
@@ -26,6 +28,9 @@
 \interdisplaylinepenalty=2500
 \newcommand\Mark[1]{\textsuperscript{#1}}
 \newcommand\fixit[1]{{\color{red}{\Large FIX:} #1}}
+
+\newcommand{\argmax}[1]{\underset{#1}{\operatorname{arg\,max\,}}}
+
 \begin{document}
 %
 % paper title
@@ -79,49 +84,35 @@ The report is organized as follows. In Section~\ref{sec:CbasedImplementation} ZN
 \end{figure}
 
 \section{One thread implementation of ZNCC algorithm}\label{sec:CbasedImplementation}
-
+\subsection{Are-based correspondence search}
 The goal of the correspondence search is to find the corresponding pixel in the right image (a match) for the given pixel on the left image. Usually, comparing just pixels is not enough, therefore, their neighborhoods are compared.
 
-In area based matching algorithms, rectangular blocks of pixels from a set of two images $W \times H$ (left and right images) are compared and matched. We conducted our experiments for the images presented in Fig.~\ref{fig:givenImages}.  For each block of the right image, designated by reference window, a corresponding block in the left image is sought using a given similarity measure as main criteria. During the search process, the correspondent block of the left image is moved by integer increments $(c,l)$ around a predefined region, designated by \textit{search window}, and an array of similarity scores $d(c,l)$ is generated for integer disparity values. In this work, we suggest the size of searching and referenced windows is equal. The position $(c_m, l_m)$ of the moving block, corresponding to the maximum computed value of the considered similarity function $\otimes$ for that search window, is selected and chosen to compute the optimum disparity vector corresponding to that reference window. Hence, a matching dense field $\mathbf{D}(x,y)$ is obtained by using as many overlapping search windows as the number of pixels that compose the image, thus obtaining a single disparity vector for each pixel.
+In the area based matching algorithms, rectangular blocks of pixels from a set of two images $W \times H$ (left and right images) are compared and matched. We conducted our experiments for the images presented in Fig.~\ref{fig:givenImages}. For each block of the left image, designated by reference window, a corresponding block in the right image is sought. During the search process, the correspondent block of the right image is moved with a shift parameter $d$ and compared with the left block using some similarity measure $\otimes$. In this work we will consider disparity only on a horizontal axis, therefore, there is now disparity any shift parameter on the vertical axis.
 
-%which can be normalized by the means of the samples (images)
-
-%Matching single pixels is nearly impossible, therefore every pixel is represented by a small region containing it, called correlation window. 
-%The depth of an image pixel is the distance of the corresponding space point from the camera center. To estimate the depth map and detect 3D objects, the corresponding pixels in the left and right images have to be matched.
-
+ Let $\mathbf{L}_{xy}$ and $ \mathbf{R}_{xy}$ be blocks of left and right images respectively, centered in some point $(x, y)$ and $C_{xy}(d)$ -- a cost function of matching blocks $\mathbf{L}_{xy}, \mathbf{R}_{xy}$, defined by a similarity measure $\otimes$. The disparity field $\mathbf{D}$ is estimated then as
 
 \begin{equation}
-d(c,l) = \sum_{v=0}^{Rwidth}\sum_{u=0}^{Rlength}R\left(u,v\right)\otimes S\left(c+u,l+v\right)
+\mathbf{D} = \{ d_{xy}(d): 0\leq x < W; 0\leq y < H \},
 \end{equation}
-
+\noindent where 
 \begin{equation}
-d(c_m,l_m) = argmax\{d(c,l): 0\leq c < S_w; 0\leq l < S_l \}
+d_{xy}(d) = \argmax{d}C_{xy}(d),
 \end{equation}
-
 \begin{equation}
-\mathbf{D}(x,y) = \{ d_{xy}(c_m,l_m): 0\leq x < W; 0\leq l < H \}
+C_{xy}(d) = \mathbf{L}\left(u,v\right)\otimes \mathbf{R}\left(u+d,v\right).
 \end{equation}
 
-Many different similarity measures $\otimes$ have been referred in the literature~\cite{Redert99}. The reasons for a particular selection are usually related to the computational load, achieved performance and algorithmic simplicity. However, this work mostly concentrates on Zero-mean Normalized Cross-Correlation (ZNCC) similarity function:
-
+Many different similarity measures $\otimes$ have been referred in the literature~\cite{Redert99}. The reasons for a particular selection are usually related to the computational load, achieved performance and algorithmic simplicity. In this work we use ZNCC similarity measure:
 \begin{equation}\label{eq:zncc}
-ZNCC(R,S)=\frac{\left(R-\overline{R}\right) * \left(S-\overline{S}\right)}{\|R-\overline{R}\| \|S-\overline{S}\|}
-\end{equation}
-%$R\left(u,v\right)$
-%$S\left(c,l\right)$
-
-\noindent where numerator is the scalar product of the reference and search windows. $R$ denotes a reference window pixel, $S$ a search window pixel, $\overline{R}$ the local mean of the reference window: $\overline{R}=\sum_{v=0}^{Rlength}\sum_{u=0}^{Rwidth}R\left(u,v\right)$, and $\overline{S\left(c,l\right)}$ the pixel mean in the block of the search window being compared: $\overline{S\left(c,l\right)}=\sum_{v=0}^{Rlength}\sum_{u=0}^{Rwidth}S\left(c+u-d,l+v\right)$. The Euclidean norm is noted:
-\begin{equation}
-\|R\| = \sqrt{\sum_{v=0}^{Rlength}\sum_{u=0}^{Rwidth}\left(R\left(u,v\right) - \overline{R}\right)^2}
+ZNCC_{xy}(d)=\frac{\left(\mathbf{L}_{xy}-\overline{\mathbf{L}_{xy}}\right) * \left(\mathbf{R}_{(x-d)y}-\overline{\mathbf{R}_{(x-d)y}}\right)}
+{\|\mathbf{L}_{xy}-\overline{\mathbf{L}_{xy}}\|_2 \|\mathbf{R}_{(x-d)y}-\overline{\mathbf{R}_{(x-d)y}}\|_2}
 \end{equation}
 
-Usually, the selection of the size of the reference window is not a simple and trivial task. It has been shown that the probability of a mismatch usually decreases as the size of the reference window increases. However, using large windows leads to an accuracy loss, since the influence of image differences increases greatly with the increase of the considered area. Therefore, this parameter must be great enough so that search window comprises the correspondent block of the given image. Furthermore, a difficult and important trade-off must be done when selecting this window size, since the computational load and processing time usually increase quadratically with the size of the window. Often, a compromise must be made, by adjusting these parameters according to the image size and contents. Taking into account all these factors and evaluating many experiments, we found that $15 \times 21$ is an optimal size of the window.
+\noindent where $\overline{\mathbf{L}_{xy}},\overline{\mathbf{R}_{xy}}$ -- block means.
 
-The estimation of dense disparity maps is usually performed by taking in consideration a set of constrains relating the two images being analyzed, making it possible to decrease the dimension and reduce the ambiguity of this problem, thus decreasing the total processing time. In this work, we admit two assumptions:
-\begin{itemize}
-	\item \textit{Epipolar Constrain:} allow to convert 2D search into 1D search. For the epipolar rectified image pair, each point in the left image lies on the same horizontal line (epipolar line) as in the right image. This approach is used to reduce a search space for depth map computation algorithms.
-	\item \textit{Unicity:} imposes that each pixel can have, at most, one correspondent pixel in the other image.
-\end{itemize}
+Usually, the selection of the size of the reference window is not a simple and trivial task. It has been shown that the probability of a mismatch usually decreases as the size of the reference window increases. However, using large windows leads to an accuracy loss, since the influence of image differences increases greatly with the increase of the considered area. Therefore, this parameter must be great enough so that search window comprises the correspondent block of the given image. Furthermore, a difficult and important trade-off must be done when selecting this window size, since the computational load and processing time usually increase quadratically with the size of the window. Often, a compromise must be made, by adjusting these parameters according to the image size and contents. Taking into account all these factors and evaluating many experiments, we experimentally found that $15 \times 21$ is an optimal size of the window for our implementation and input data.
+
+\subsection{ZNCC algorithm design}
 
 \begin{figure}[t!]
 \centering
@@ -144,13 +135,15 @@ The estimation of dense disparity maps is usually performed by taking in conside
 \caption{Given images for disparity map calculation}\label{fig:disparities}
 \end{figure}
 
-Utilizing Eq.~\ref{eq:zncc}, we calculated disparity map for both images and for a disparity value \textit{d} from 0 to 64. The results are illustrated in Fig.~\ref{subfig:leftDisparity} and Fig.~\ref{subfig:rightDisparity} respectively. However, to compute Right-Left disparity we made a trick with setting up a disparity range. Specifically, the lower bound was initialized to -64 and the upper bound to 0. Computing the disparities is trivial: simply choose at each pixel the disparity associated with the minimum cost value. Thus, these methods perform a local 'winner-take-all' (WTA) optimization at each pixel. Once disparity map for both images was computed, we perform post-processing consisting of two stages: cross-checking and occlusion filling. Cross-checking is calculated by taking the computed disparity value in one image, and re-projecting it in the other image. If the difference in the values is higher than a given threshold (equals to 2 in our work), then the pixel value is initialized to 0. Occlusion filling was performed by applying the nearest neighbour interpolation. The final disparity map is illustrated in Fig.~\ref{subfig:finalDisparity}. It can clearly be seen that the proposed algorithm and post-processing steps allow to achieve good accuracy in calculation of disparity map. However, the computational load and elapsed time for this implementation are remarkably high. In following section, we propose an approach based on OpenCL technology which significantly improves performance.
+The original that we had was scaled to a smaller size (4 times) in order to decrease computational time. Next, utilizing Eq.~\ref{eq:zncc}, we calculated disparity maps for both of the images and for a disparity value \textit{d} from 0 to 64. The results are illustrated in Fig.~\ref{subfig:leftDisparity} and Fig.~\ref{subfig:rightDisparity} respectively. In order to compute Right-Left disparity we made a trick with setting up a disparity range. Specifically, the lower bound was initialized to -64 and the upper bound to 0. Once disparity maps for both images were computed, we perform post-processing consisting of two stages: cross-checking and occlusion filling. Cross-checking is calculated by taking the computed disparity value in one image, and re-projecting it in the other image. If the difference in the values is higher than a given threshold (equals to 2 in our work), then the pixel value is initialized to 0. Occlusion filling was performed by applying the nearest neighbor interpolation. Neighborhood was chosen to be a square block $256\times256$. The final disparity map is illustrated in Fig.~\ref{subfig:finalDisparity}. 
 
-\section{"Naive" OpenCL implementation}\label{sec:OpenclImplementation}
+Visually, we can observe, that our result looks quite good after post-processing steps, however, the computational load and elapsed time for this implementation are remarkably high -- more than one minute. In the following section, we propose an approach for acceleration of our implementation of ZNCC algorithm based on OpenCL technology which significantly improves performance.
+
+\section{OpenCL implementation}\label{sec:OpenclImplementation}
 \subsection{Description}
-In the so called "Naive implementation", we have not used any optimization recommended by manufacturers. We have created a 2-dimensional grid of work-groups of different sizes, where each work-item corresponded one pixel.
+In terms of OpenCL, there exist two types of devices -- host and device. In our case, the device was a GPU and host -- Central Processor (CPU).
 
-We have decided to create a separte kernel for each of the subproblems (resizing, zncc computation, cross-checking and occlusion filling): \textit{resize.cl}, \textit{zncc.cl}, \textit{cross\_check.cl} and \textit{occlusion.cl} respectively. We performed normalization of the disparity map on the CPU. The structure of the host code is presented in Algorithm \ref{hostcode}.
+We have decided to create a separate kernel for each of the sub-problems of our implementation (resizing, zncc computation, cross-checking and occlusion filling): \textit{resize.cl}, \textit{zncc.cl}, \textit{cross\_check.cl} and \textit{occlusion.cl} respectively. We performed normalization of the disparity map (between 0 and 255) on the host, since it would take a lot of efforts to implement it in OpenCL and it would not give a significant performance improvement. The structure of the host code is presented in Algorithm \ref{hostcode}.
 
 
  \begin{algorithm}
@@ -172,10 +165,19 @@ We have decided to create a separte kernel for each of the subproblems (resizing
  \end{algorithmic} 
  \end{algorithm}
 
-The Naive implementation of the kernels does not utilize any local memory optimization tricks and basically uses two dimensional workers' identifiers instead of indicies of loops in the one thread implementation.
+\section{Optimization of OpenCL kernels}\label{sec:Optimization}
+\subsection{Local memory tricks} 
+In our work we did not use any local memory tricks, but the potential usage of it would be in caching the blocks for the calculation of mean and standard deviation.
+
+\subsection{If-statements removal}
+First kernel optimization which we have made was to remove extra if-statements in kernels which check the boundaries. The outcome of such modification was a slight performance improvement (improved value is presented in the Table \ref{benchnaive}).
+
+\subsection{Work-group optimization}
+We considered work-groups sizes to be divisors of width and height of the resized images. As a global size we took the new image size -- $504\times735$. We enumerated all possible values of work-group sizes using divisors of 504 and 735 and found out, that the work group size giving the best performance in our implementation of ZNCC is $3\times21$.
+
 
 \section{Benchmarks}\label{sec:Benchmarks}
-We have tested the Naive implementation on two different machines with Ubuntu 14.04 64 bit. Both machines have NVIDIA GPUs, the same version graphics drivers and CUDA 7.5. As a global size we took the new image size -- $504\times735$. We enumerated all possible values of workgroup sizes using divisors of 504 and 735 and found out, that the work group size giving the best performance in our implementation of ZNCC is $3\times21$. We have also run our implementation on the laptop with Intel CPU 6200U Skylake. However, OpenCL implementation turned out to be slower than the original C version. Most probably, it happened because of the communication overhead. We could improve the benchmark result, but decided to fucus only on GPU implementations. Our benchmark results (average of 3 launches) are presented in Table \ref{benchnaive}.
+We have tested our OpenCL implementation on two different machines with Ubuntu 14.04 64 bit. Both machines have NVIDIA GPUs, the same version graphics drivers and CUDA 7.5. We also ran our implementation on the laptop with Intel CPU 6200U Skylake. However, OpenCL implementation turned out to be slower than the original C version. Most probably, it happened because of the communication overhead. We could have improved the benchmark result, but decided to focus only on GPU implementations. Our benchmark results (average of 3 launches) are presented in Table \ref{benchnaive}.
 \begin{table}
 \caption{Benchmarking of the naive OpenCL implementation}\label{benchnaive}
 \centering
@@ -191,17 +193,12 @@ NVIDIA GTX750 Titan & 77.5322 & 1.7745 & 43.7\\
 \end{tabular}
 \end{table}
 
-In our testing equipment, the machine with the more powerful GPU had less powerful CPU than the machine with GTX750 (Intel(R) Core(TM) i5-3470 vs. Intel(R) Core(TM) i5-4570). By changing the processors, our performance gain would be still good -- 92.79. In this report, we consider it as our final result.
+In our testing equipment, the machine with the more powerful GPU had less powerful CPU than the machine with GTX750 (Intel(R) Core(TM) i5-3470 vs. Intel(R) Core(TM) i5-4570). By changing the processors, our performance gain would be still good -- 92.79. In our work we report it as a final result.
 
-\section{Optimization of OpenCL kernels}\label{sec:Optimization}
-\subsection{If-statements removal}
-First kernel optimization which we have made was to remove extra if-statements in kernels which check the boundaries. The outcome of such modification was a slight performance improvement (improved value is presented in the Table \ref{benchnaive}).
-
-\subsection{Local memory usage}
-In our work we did not use any local memory tricks, but the potential usage of it would be in caching the blocks for the calculation of mean and standard deviation.
 
 \section{Compiling and running}
-We have tested our implementation on the following software: Ubuntu 14.04 64 bit, GCC compiler version 4.8.4, NVIDIA drivers 352.93, NVIDIA CUDA 7.5. In order to compile our code, the user just need to use make utility (see the Listing \ref{mylisting}).
+
+We have tested our implementation on the following software: Ubuntu 14.04 64 bit, GCC compiler version 4.8.4, NVIDIA drivers 352.93, NVIDIA CUDA 7.5. In order to compile the code, the user just need to use \textit{make} utility (see the Listing \ref{mylisting}).
 
 \begin{lstlisting}[language=bash,caption={Compiling commands},label={mylisting}]
 # Compile and run OpenCL code
@@ -210,8 +207,10 @@ make cl runcl
 make c runc
 \end{lstlisting}
 
+Our implementations of ZNCC are available on GitHub. The code is available by the following link -- \url{https://github.com/lext/zncc}
+
 \section{Discussion and Conclusions}
-In this work we have presented a Naive implementation of ZNCC algorithm using OpenCL. Despite the fact that we did not use any local memory tricks, we have shown, that it is possible to  achieve a quite good result of performance gain -- 92.79 on a machine with Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz and GPU NVIDIA GTX960. We have also shown, that by changing the GPU to the newer generation, our performance gain has increased in more than twice.
+In this work we have presented an implementation of ZNCC algorithm using OpenCL. Despite of the fact that we did not use any local memory tricks, which usually give a good performance gain, we have shown, that it is possible to  achieve a quite good result even without them -- 92.79 on a machine with Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz and GPU NVIDIA GTX960. We have also shown, that by changing the GPU to the newer generation, our performance gain has increased more than twice.
 
 \bibliographystyle{IEEEtran}
 \bibliography{report}
