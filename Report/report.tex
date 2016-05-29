@@ -25,7 +25,7 @@
 
 \interdisplaylinepenalty=2500
 \newcommand\Mark[1]{\textsuperscript{#1}}
-
+\newcommand\fixit[1]{{\color{red}{\Large FIX:} #1}}
 \begin{document}
 %
 % paper title
@@ -48,14 +48,18 @@
 
 
 \begin{abstract}
-In this report we describe an implementation of ZNCC algorithm. In particular, we show the accelerated implementation of the algorithm using OpenCL 1.2 standard. The performance gain which we managed to achive is around 100 times.
+In this report we describe an implementation of zero mean cross-correlation algorithm for stereo correspondence search. In particular, we show the accelerated implementation of the algorithm using OpenCL v.1.2 standard. The performance gain which we managed to achieve with the accelerated version of the algorithm is around 100 times.
 \end{abstract}
 
 
 \section{Introduction}
-During the past few years, the estimation of the disparity field of an image sequence has been playing an increasingly important role in a large number of applications of the computer vision area such as multi-view image generation, 3D reconstruction from stereo image pairs and object recognition. Obtaining a precise and accurate depth map is the ultimate goal for 3D shape recovery and 3D image reconstruction. The main purpose of this report is focused on the process of the depth map computation from the images that are captured by the cameras placed in such positions so that a scene is taken from two slightly different views (angles). 
+Estimation of a disparity map of an image sequence plays important role in such large areas of computer vision as multi-view image generation \cite{}, 3D reconstruction from stereo image pairs \cite{} and object recognition\cite{}. Obtaining a precise and accurate depth map is the ultimate goal in these applications.
 
-By definition, disparity is the difference between two matched point's coordinates. The disparity map is composed by a dense field of disparity vectors, one for each matched pixel of group of pixels. Several different approaches have been developed to solve this correspondence search problem. However, this work concentrates on area based algorithms, where registration algorithms using cross-correlation based similarity measures are used to find the block of image pixels which best matches the one being analyzed in the other image. Area based algorithms still remain very popular and will assume an important position in the next future in correspondence computation tasks. The main reason for this fact relies on their simple and straightforward implementation, well suited for parallel implementations based on GPU computation, and their robustness against certain image transformations. Furthermore, these algorithms directly generate the dense disparity map, whereas in other approaches such as feature based algorithms the interpolation step is required if a dense map of the scene is desired. However, this algorithm presents some serious drawbacks. The most serious one is concerned with the high computational load, usually associated to the dense matching field computation. To overcome this disadvantage, an algorithm evaluating on GPU is proposed to compute dense disparity map. In our work, OpenCL 1.2 standard has been used. In addition, we conducted some experiments with optimization of the proposed algorithm utilizing the local memory of GPU, that allows us to improve performance of the algorithm up to 100 times compared to plain C implementation in absolute values.
+By the definition, binoclular disparity is positional difference between the two retinal projections of a given point in space. This positional difference results from the fact that the two eyes are laterally separated and therefore see the world from two slightly different vantage points \cite{Qian1997359}.
+
+Many different approaches have been developed to estimate the disparity field \cite{}, however in this work we focus on one of the area-based algorithm for the disparity map estimation -- zero mean cross correlation (ZNCC) \cite{}. In addition to that, we will show how to apply several post-processing techniques in order to compute the depth map out of two disparity fields. 
+
+The benefit of the ZNCC algorithm is a simple and straightforward implementation, which is moreover well suited for data-parallel acceleration using Graphical Processing Units (GPU). In our work, OpenCL standard v.1.2 has been used for this purpose. In addition, we have performed a series of experiments and optimized our implementation for NVidia GPU.
 
 The report is organized as follows. In Section~\ref{sec:CbasedImplementation} ZNCC algorithms implemented in C language is presented. Section~\ref{sec:OpenclImplementation} describes the proposed method of calculating disparity map based on OpenCL technology. Section~\ref{sec:Benchmarks} presents benchmarks of the algorithm evaluated on two different GPU. In Section~\ref{sec:Optimization} we briefly discuss about OpenCL optimization and a way how to improve performance further. In the end of this report we summarize our results.
 
@@ -75,9 +79,10 @@ The report is organized as follows. In Section~\ref{sec:CbasedImplementation} ZN
 \end{figure}
 
 \section{One thread implementation of ZNCC algorithm}\label{sec:CbasedImplementation}
-For every pixel in the left image our goal is to find the corresponding pixel in the right image (a match). Because a single pixel value is typically not discriminative enough to reliably find the corresponding pixel, one usually tries to match small windows around each pixel against all possible windows in the right image on the same row. We chose the window to be centered around the pixel and of constant size. The detailed explanation of setting window size is presented further in current section.
 
-In area based matching algorithms, rectangular blocks of pixels from a set of two images $W \times H$ (left and right images) are compared and matched. Disparity map is calculated for images presented in Fig.~\ref{fig:givenImages}. For each block of the right image, designated by reference window, a correspondent block in the left image is sought using a given similarity measure as main criteria. During the search process, the correspondent block of the left image is moved by integer increments $(c,l)$ around a predefined region, designated by \textit{search window}, and an array of similarity scores $d(c,l)$ is generated for integer disparity values. In this work, we suggest the size of searching and referenced windows is equal. The position $(c_m, l_m)$ of the moving block, corresponding to the maximum computed value of the considered similarity function $\otimes$ for that search window, is selected and chosen to compute the optimum disparity vector corresponding to that reference window. Hence, a matching dense field $\mathbf{D}(x,y)$ is obtained by using as many overlapping search windows as the number of pixels that compose the image, thus obtaining a single disparity vector for each pixel.
+The goal of the correspondence search is to find the corresponding pixel in the right image (a match) for the given pixel on the left image. Usually, comparing just pixels is not enough, therefore, their neighborhoods are compared.
+
+In area based matching algorithms, rectangular blocks of pixels from a set of two images $W \times H$ (left and right images) are compared and matched. We conducted our experiments for the images presented in Fig.~\ref{fig:givenImages}. \fixit{ For each block of the right image, designated by reference window, a corresponding block in the left image is sought using a given similarity measure as main criteria. During the search process, the correspondent block of the left image is moved by integer increments $(c,l)$ around a predefined region, designated by \textit{search window}, and an array of similarity scores $d(c,l)$ is generated for integer disparity values. In this work, we suggest the size of searching and referenced windows is equal. The position $(c_m, l_m)$ of the moving block, corresponding to the maximum computed value of the considered similarity function $\otimes$ for that search window, is selected and chosen to compute the optimum disparity vector corresponding to that reference window. Hence, a matching dense field $\mathbf{D}(x,y)$ is obtained by using as many overlapping search windows as the number of pixels that compose the image, thus obtaining a single disparity vector for each pixel.
 
 %which can be normalized by the means of the samples (images)
 
@@ -140,8 +145,8 @@ The estimation of dense disparity maps is usually performed by taking in conside
 \end{figure}
 
 Utilizing Eq.~\ref{eq:zncc}, we calculated disparity map for both images and for a disparity value \textit{d} from 0 to 64. The results are illustrated in Fig.~\ref{subfig:leftDisparity} and Fig.~\ref{subfig:rightDisparity} respectively. However, to compute Right-Left disparity we made a trick with setting up a disparity range. Specifically, the lower bound was initialized to -64 and the upper bound to 0. Computing the disparities is trivial: simply choose at each pixel the disparity associated with the minimum cost value. Thus, these methods perform a local 'winner-take-all' (WTA) optimization at each pixel. Once disparity map for both images was computed, we perform post-processing consisting of two stages: cross-checking and occlusion filling. Cross-checking is calculated by taking the computed disparity value in one image, and re-projecting it in the other image. If the difference in the values is higher than a given threshold (equals to 2 in our work), then the pixel value is initialized to 0. Occlusion filling was performed by applying the nearest neighbour interpolation. The final disparity map is illustrated in Fig.~\ref{subfig:finalDisparity}. It can clearly be seen that the proposed algorithm and post-processing steps allow to achieve good accuracy in calculation of disparity map. However, the computational load and elapsed time for this implementation are remarkably high. In following section, we propose an approach based on OpenCL technology which significantly improves performance.
-
-\section{"Naive" OpenCL implementation}
+}
+\section{"Naive" OpenCL implementation}\label{sec:OpenclImplementation}
 \subsection{Description}
 In the so called "Naive implementation", we have not used any optimization recommended by manufacturers. We have created a 2-dimensional grid of work-groups of different sizes, where each work-item corresponded one pixel.
 
@@ -169,7 +174,7 @@ We have decided to create a separte kernel for each of the subproblems (resizing
 
 The Naive implementation of the kernels does not utilize any local memory optimization tricks and basically uses two dimensional workers' identifiers instead of indicies of loops in the one thread implementation.
 
-\section{Benchmarks}
+\section{Benchmarks}\label{sec:Benchmarks}
 We have tested the Naive implementation on two different machines with Ubuntu 14.04 64 bit. Both machines have NVIDIA GPUs, the same version graphics drivers and CUDA 7.5. As a global size we took teh new image size -- $504\times735$. We enumerated all possible values of workgroup sizes using divisors of 504 and 735 and found out, that the work group size, which gives the best performance in our implementation of ZNCC is $3\times21$. We have also run our implementation on the laptop with Intel CPU 6200U skylake. However, OpenCL implementation turned out to be slower than the original C version. Most probably, it happened because of the communication overhead. We could improve the benchmark result, but decided to fucus only on GPU implementations. Our benchmark results (average of 3 launches) are presented in Table \ref{benchnaive}.
 \begin{table}
 \caption{Benchmarking of the naive OpenCL implementation}\label{benchnaive}
@@ -188,7 +193,7 @@ NVIDIA GTX750 Titan & 77.5322 & 1.7745 & 43.7\\
 
 In our testing equipment, the machine with the more powerful GPU had less powerful CPU than the machine with GTX750 (Intel(R) Core(TM) i5-3470 vs. Intel(R) Core(TM) i5-4570). By changing the processors, our performance gain would be still good -- 92.79. In this report, we consider it as our final result.
 
-\section{Optimization of OpenCL kernels}
+\section{Optimization of OpenCL kernels}\label{sec:Optimization}
 \subsection{If-statements removal}
 First kernel optimization which we have made was to remove extra if-statements in kernels which check the boundaries. The outcome of such modification was a slight performance improvement (improved value is presented in the Table \ref{benchnaive}).
 
@@ -209,7 +214,10 @@ make c runc
 In this work we have presented a Naive implementation of ZNCC algorithm using OpenCL. Despite of the fact, that We did not use any local memory tricks, we have shown, that it is possible to  achieve a quite good result of performance gain -- 92.79 on a machine with Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz and GPU NVIDIA GTX960. We have also shown, that by changing the GPU to the newer generation, our performance gain has increased in more than twice.
 
 
+
 \bibliographystyle{IEEEtran}
+\bibliography{report}
+
 \end{document}
 
 

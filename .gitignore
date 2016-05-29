@@ -10,3 +10,7 @@ resized_left.png
 resized_right.png
 Report/*.aux
 Report/*.log
+Report/report.bbl
+Report/report.blg
+Report/report.synctex.gz
+
