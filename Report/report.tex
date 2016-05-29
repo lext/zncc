@@ -84,7 +84,7 @@ The report is organized as follows. In Section~\ref{sec:CbasedImplementation} ZN
 \end{figure}
 
 \section{One thread implementation of ZNCC algorithm}\label{sec:CbasedImplementation}
-\subsection{Are-based correspondence search}
+\subsection{Area-based correspondence search}
 The goal of the correspondence search is to find the corresponding pixel in the right image (a match) for the given pixel on the left image. Usually, comparing just pixels is not enough, therefore, their neighborhoods are compared.
 
 In the area based matching algorithms, rectangular blocks of pixels from a set of two images $W \times H$ (left and right images) are compared and matched. We conducted our experiments for the images presented in Fig.~\ref{fig:givenImages}. For each block of the left image, designated by reference window, a corresponding block in the right image is sought. During the search process, the correspondent block of the right image is moved with a shift parameter $d$ and compared with the left block using some similarity measure $\otimes$. In this work we will consider disparity only on a horizontal axis, therefore, there is now disparity any shift parameter on the vertical axis.
@@ -170,7 +170,7 @@ We have decided to create a separate kernel for each of the sub-problems of our 
 In our work we did not use any local memory tricks, but the potential usage of it would be in caching the blocks for the calculation of mean and standard deviation.
 
 \subsection{If-statements removal}
-First kernel optimization which we have made was to remove extra if-statements in kernels which check the boundaries. The outcome of such modification was a slight performance improvement (improved value is presented in the Table \ref{benchnaive}).
+First kernel optimization which we have made was to remove extra if-statements in kernels which check the boundaries. The outcome of such modification was a slight performance improvement (improved value is presented in Table \ref{benchnaive}).
 
 \subsection{Work-group optimization}
 We considered work-groups sizes to be divisors of width and height of the resized images. As a global size we took the new image size -- $504\times735$. We enumerated all possible values of work-group sizes using divisors of 504 and 735 and found out, that the work group size giving the best performance in our implementation of ZNCC is $3\times21$.
