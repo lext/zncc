@@ -186,14 +186,14 @@ We have tested our OpenCL implementation on two different machines with Ubuntu 1
 \hline
 {\bfseries Device}  & {\bfseries Plain C time [sec]}  & {\bfseries GPU time [sec]} & {\bfseries Performance gain} \\
 \hline
-NVIDIA GTX960 OC & 84.9350 & 0.8401 & 101.10\\
+NVIDIA GTX960 OC & 84.9350 & 0.8189 & 103.72\\
 \hline
-NVIDIA GTX750 Titan & 77.5322 & 1.6942 & 45.76\\
+NVIDIA GTX750 Titan & 77.5322 & 1.67 & 46.43\\
 \hline
 \end{tabular}
 \end{table}
 
-In our testing equipment, the machine with the more powerful GPU had less powerful CPU than the machine with GTX750 (Intel(R) Core(TM) i5-3470 vs. Intel(R) Core(TM) i5-4570). By changing the processors, our performance gain would be still good -- 92.29. In our work we report it as a final result.
+In our testing equipment, the machine with the more powerful GPU had less powerful CPU than the machine with GTX750 (Intel(R) Core(TM) i5-3470 vs. Intel(R) Core(TM) i5-4570). By changing the processors, our performance gain would be still good -- 94.68. In our work we report it as a final result.
 
 
 \section{Compiling and running}
@@ -210,7 +210,7 @@ make c runc
 Our implementations of ZNCC are available on GitHub. The code is available by the following link -- \url{https://github.com/lext/zncc}
 
 \section{Discussion and Conclusions}
-In this work we have presented an implementation of ZNCC algorithm using OpenCL. Despite the fact that we did not use any local memory tricks, which usually give a good performance gain, we have shown, that it is possible to  achieve a quite good result even without them -- 92.29 on a machine with Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz and GPU NVIDIA GTX960. We have also shown, that by changing the GPU to the newer generation, our performance gain has increased more than twice.
+In this work we have presented an implementation of ZNCC algorithm using OpenCL. Despite the fact that we did not use any local memory tricks, which usually give a good performance gain, we have shown, that it is possible to  achieve a quite good result even without them -- 94.68 on a machine with Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz and GPU NVIDIA GTX960. We have also shown, that by changing the GPU to the newer generation, our performance gain has increased more than twice.
 
 \bibliographystyle{IEEEtran}
 \bibliography{report}

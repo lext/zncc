@@ -175,11 +175,11 @@ int32_t main(int32_t argc, char** argv)
     
     
     
-    cl_mem dOriginalImageL = clCreateImage(ctx, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, \
+    cl_mem dOriginalImageL = clCreateImage(ctx, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, \
     &format, &desc, OriginalImageL, &status);
     CHECK_CL_ERROR(status, "clCreateImage");
     
-    cl_mem dOriginalImageR = clCreateImage(ctx, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, \
+    cl_mem dOriginalImageR = clCreateImage(ctx, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, \
     &format, &desc, OriginalImageR, &status);
     CHECK_CL_ERROR(status, "clCreateImage");
     
