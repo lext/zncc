@@ -64,7 +64,7 @@ By the definition, binoclular disparity is positional difference between the two
 
 Many different approaches have been developed to estimate the disparity field \cite{Redert99}, however in this work we focus on one of the area-based algorithm for the disparity map estimation -- zero mean cross correlation (ZNCC)~\cite{aschwanden92}. In addition, we will show how to apply several post-processing techniques in order to compute the depth map out of two disparity fields. 
 
-The benefit of the ZNCC algorithm is a simple and straightforward implementation, which is moreover well suited for data-parallel acceleration using Graphical Processing Units (GPU). In our work, OpenCL standard v.1.2 has been used for this purpose. In addition, we have performed a series of experiments and optimized our implementation for NVidia GPU.
+The benefit of the ZNCC algorithm is a simple and straightforward implementation, which is moreover well suited for data-parallel acceleration using Graphical Processing Units (GPU). In our work, OpenCL standard v.1.2 has been used for this purpose. In addition, we have performed a series of experiments and optimized our implementation for NVIDIA GPU.
 
 The report is organized as follows. In Section~\ref{sec:CbasedImplementation} ZNCC algorithms implemented in C language is presented. Section~\ref{sec:OpenclImplementation} describes the proposed method of calculating disparity map based on OpenCL technology. Section~\ref{sec:Benchmarks} presents benchmarks of the algorithm evaluated on two different GPU. In Section~\ref{sec:Optimization} we briefly discuss about OpenCL optimization and a way how to improve performance further. In the end of this report we summarize our results.
 
@@ -173,7 +173,7 @@ In our work we did not use any local memory tricks, but the potential usage of i
 First kernel optimization which we have made was removing extra if-statements  which check the image boundaries. The outcome of such modification was a slight performance improvement (5\%, improved value is presented in Table \ref{benchnaive}).
 
 \subsection{Work-group optimization}
-We considered work-groups sizes to be divisors of width and height of the resized images. As a global size we took the new image size -- $504\times735$. We enumerated all possible values of work-group sizes using divisors of 504 and 735 and found, that the work group size giving the best performance in our implementation of ZNCC is $3\times21$.
+We considered work-groups sizes to be divisors of width and height of the resized images. As a global size we took the new image size -- $504\times735$. We enumerated all possible values of work-group sizes using divisors of 504 and 735 and found, that the work group size giving the best performance in our implementation of ZNCC is $3\times21$. The number of work-items in such a work-group is almost equal to 64, which is recommended by NVIDIA.
 
 
 \section{Benchmarks}\label{sec:Benchmarks}
