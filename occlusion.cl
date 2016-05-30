@@ -1,7 +1,6 @@
-__kernel void occlusion(__global uchar* map, __global uchar* result, uint w, uint h, uint nsize) {
-    int i = get_global_id(0);
-    int j = get_global_id(1);
-    int imsize = w*h; // Size of the image
+__kernel void occlusion(__global uchar* map, __global uchar* result, uint w, uint h, uint nsize, int imsize) {
+    const int i = get_global_id(0);
+    const int j = get_global_id(1);
     int i_b, j_b; // Indices within the block
     int ind_neib; // Index in the nighbourhood
     int ext;
@@ -10,7 +9,6 @@ __kernel void occlusion(__global uchar* map, __global uchar* result, uint w, uin
     // If the value of the pixel is zero, perform the occlusion filling by nearest neighbour interpolation
     result[i*w+j] = map[i*w+j];
     if(map[i*w+j] == 0) {
-        
          // Spreading search of non-zero pixel in the neighborhood i,j
         stop = false;
         for (ext=1; (ext <= nsize/2) && (!stop); ext++) {

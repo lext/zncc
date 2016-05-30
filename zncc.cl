@@ -1,9 +1,6 @@
-__kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar *dmap, int w, int h, int bsx, int bsy, int mind, int maxd) {
-    int i = get_global_id(0);
-    int j = get_global_id(1);
-
-    int imsize = w*h; // Size of the image
-    int bsize = bsx*bsy; // Block size
+__kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar *dmap, int w, int h,  int bsx, int bsy, int mind, int maxd, int bsize, int imsize) {
+    const int i = get_global_id(0);
+    const int j = get_global_id(1);
 
     int i_b, j_b; // Indices within the block
     int ind_l, ind_r; // Indices of block values within the whole image
@@ -66,7 +63,7 @@ __kernel void zncc(__global uchar *left, __global  uchar *right, __global uchar 
             }
         }
         // Normalizing the denominator
-        current_score /= sqrt(lbstd)*sqrt(rbstd);
+        current_score /= native_sqrt(lbstd)*native_sqrt(rbstd);
         // Selecting the best disparity
         if (current_score > best_score) {
             best_score = current_score;

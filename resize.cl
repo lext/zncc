@@ -1,16 +1,16 @@
-#pragma OPENCL EXTENSION cl_khr_fp64: enable
+__constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE| CLK_ADDRESS_CLAMP_TO_EDGE| CLK_FILTER_NEAREST;
 
-__kernel void resize(__global uchar *imageL, __global  uchar *imageR, __global uchar *resizedL, __global  uchar *resizedR, int w, int h) {
-	int i = get_global_id(0);
-	int j = get_global_id(1);
-    int new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
-    int orig_i, orig_j; // Indices of the original image
-
+__kernel void resize(__read_only image2d_t imageL, __read_only image2d_t imageR, __global uchar *resizedL, __global  uchar *resizedR, int new_w, int new_h) {
+	const int i = get_global_id(0);
+	const int j = get_global_id(1);
+	
     // Calculating corresponding indices in the original image
-    orig_i = (4*i-1*(i > 0)); 
-    orig_j = (4*j-1*(j > 0));
+    int2 orig_pos = {(4*j-1*(j > 0)), (4*i-1*(i > 0))};
     // Grayscaling and resizing
-    resizedL[i*new_w+j] = 0.2126*imageL[orig_i*(4*w)+4*orig_j]+0.7152*imageL[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageL[orig_i*(4*w)+4*orig_j + 2];
-    resizedR[i*new_w+j] = 0.2126*imageR[orig_i*(4*w)+4*orig_j]+0.7152*imageR[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageR[orig_i*(4*w)+4*orig_j + 2];
+    uint4 pxL = read_imageui(imageL, sampler, orig_pos);
+    uint4 pxR = read_imageui(imageR, sampler, orig_pos);
+    
+    resizedL[i*new_w+j] = 0.2126*pxL.x+0.7152*pxL.y+0.0722*pxL.z;
+    resizedR[i*new_w+j] = 0.2126*pxR.x+0.7152*pxR.y+0.0722*pxR.z;
 
 }

@@ -12,12 +12,14 @@
 
 int MAXDISP = 64; // Maximum disparity (downscaled)
 int MINDISP = 0;
-const int BSX = 21; // Window size on X-axis (width)
-const int BSY = 15; // Window size on Y-axis (height)
+const uint32_t BSX = 21; // Window size on X-axis (width)
+const uint32_t BSY = 15; // Window size on Y-axis (height)
 const int THRESHOLD = 2;// Threshold for cross-checkings
 const int NEIBSIZE = 256; // Size of the neighborhood for occlusion-filling
+const uint32_t BSIZE = 315;
 
-
+cl_image_format format = { CL_RGBA, CL_UNSIGNED_INT8 };
+cl_image_desc desc;
 /* ---------------- Macros ---------------- */
 
 // This macros was found somewhere on stackoverflow and it is used to release the memory of
@@ -66,6 +68,7 @@ int32_t main(int32_t argc, char** argv)
     uint32_t w1, h1;
     uint32_t w2, h2;
     uint32_t imsize;
+    
     clock_t start, end;
     int tmp;
     const char* OUT_DEVINFO = getenv("OUT_DEVINFO");
@@ -106,6 +109,7 @@ int32_t main(int32_t argc, char** argv)
 	Width = w1/4;
 	Height = h1/4;
     imsize = Width*Height;
+    
     char *resize_knl_text = read_file("resize.cl");
     char *zncc_knl_text = read_file("zncc.cl");
     char *cross_check_knl_text = read_file("cross_check.cl");
@@ -133,19 +137,6 @@ int32_t main(int32_t argc, char** argv)
     // Global size
     const size_t globalSize1D[] = {globalSize[0]*globalSize[1]};
 
-    cl_mem dOriginalImageL = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
-    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
-        queue, dOriginalImageL, CL_TRUE,  0,
-        Width*Height*16*4, OriginalImageL,
-        0, NULL, NULL));
-
-    cl_mem dOriginalImageR = clCreateBuffer(ctx, CL_MEM_READ_ONLY, Width*Height*16*4, 0, &status);
-    CHECK_CL_ERROR(status, "clCreateBuffer");
-    CALL_CL_GUARDED(clEnqueueWriteBuffer, (
-        queue, dOriginalImageR, CL_TRUE,  0,
-        Width*Height*16*4, OriginalImageR,
-        0, NULL, NULL));
 
     cl_mem dImageL = clCreateBuffer(ctx, CL_MEM_READ_WRITE, Width*Height, 0, &status);
     CHECK_CL_ERROR(status, "clCreateBuffer");
@@ -171,17 +162,44 @@ int32_t main(int32_t argc, char** argv)
     cl_kernel cross_check_knl = kernel_from_string(ctx, cross_check_knl_text, "cross_check", NULL);
     cl_kernel occlusion_knl = kernel_from_string(ctx, occlusion_knl_text, "occlusion", NULL);
 
+
+    Disparity = (uint8_t*) malloc(Width*Height); 
+     
     start = clock();
+    
+    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    desc.image_width = w1;
+    desc.image_height = h1;
+    desc.image_depth = 8;
+    desc.image_row_pitch = w1 * 4;
+    
+    
+    
+    cl_mem dOriginalImageL = clCreateImage(ctx, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, \
+    &format, &desc, OriginalImageL, &status);
+    CHECK_CL_ERROR(status, "clCreateImage");
+    
+    cl_mem dOriginalImageR = clCreateImage(ctx, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, \
+    &format, &desc, OriginalImageR, &status);
+    CHECK_CL_ERROR(status, "clCreateImage");
+    
+    
 
     // Resizing kernel call
-    SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, w1, h1);
+    SET_6_KERNEL_ARGS(resize_knl, dOriginalImageL, dOriginalImageR, dImageL, dImageR, Width, Height);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, resize_knl,
              2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
              0, NULL, NULL));
-
+    CALL_CL_GUARDED(clFinish, (queue));
+    
+    CALL_CL_GUARDED(clEnqueueReadBuffer, (
+    queue, dImageL, CL_TRUE,  0,
+    Width*Height, Disparity,
+    0, NULL, NULL));
+      
     // Disparity LR zncc kernel call
-    SET_9_KERNEL_ARGS(zncc_knl, dImageL, dImageR, dDisparityLR, Width, Height, BSX, BSY, MINDISP, MAXDISP);
+    SET_11_KERNEL_ARGS(zncc_knl, dImageL, dImageR, dDisparityLR, Width, Height, BSX, BSY, MINDISP, MAXDISP, BSIZE, imsize);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, zncc_knl,
              2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
@@ -191,7 +209,8 @@ int32_t main(int32_t argc, char** argv)
     tmp = MINDISP;
     MINDISP = -MAXDISP;
     MAXDISP = tmp;
-    SET_9_KERNEL_ARGS(zncc_knl, dImageR, dImageL, dDisparityRL, Width, Height, BSX, BSY, MINDISP, MAXDISP);
+    SET_11_KERNEL_ARGS(zncc_knl, dImageR, dImageL, dDisparityRL, Width, Height, BSX, BSY, MINDISP, MAXDISP, BSIZE, imsize);
+    
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, zncc_knl,
              2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
@@ -203,7 +222,7 @@ int32_t main(int32_t argc, char** argv)
              1, NULL, (const size_t*)&globalSize1D, (const size_t*)&wgSize1D,
              0, NULL, NULL));
     // occlusion filling
-    SET_5_KERNEL_ARGS(occlusion_knl, dDisparityLRCC, dDisparity, Width, Height, NEIBSIZE);
+    SET_6_KERNEL_ARGS(occlusion_knl, dDisparityLRCC, dDisparity, Width, Height, NEIBSIZE, imsize);
     CALL_CL_GUARDED(clEnqueueNDRangeKernel,
             (queue, occlusion_knl,
              2, NULL, (const size_t*)&globalSize, (const size_t*)&wgSize,
@@ -211,7 +230,6 @@ int32_t main(int32_t argc, char** argv)
     
     CALL_CL_GUARDED(clFinish, (queue));
     
-    Disparity = (uint8_t*) malloc(Width*Height); 
     CALL_CL_GUARDED(clEnqueueReadBuffer, (
         queue, dDisparity, CL_TRUE,  0,
         Width*Height, Disparity,
