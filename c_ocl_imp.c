@@ -69,7 +69,9 @@ int32_t main(int32_t argc, char** argv)
     uint32_t w2, h2;
     uint32_t imsize;
     
-    clock_t start, end;
+    struct timespec start, finish;
+    double elapsed;
+
     int tmp;
     const char* OUT_DEVINFO = getenv("OUT_DEVINFO");
     const char* CL_PLAT = getenv("CL_PLAT");
@@ -118,9 +120,9 @@ int32_t main(int32_t argc, char** argv)
 
     /* ---------------- Requesting the device to run the computations ---------------- */
     if(!CL_PLAT || !CL_DEVICE)
-        create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
+        create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 1);
     else
-        create_context_on(CL_PLAT, CL_DEVICE, 0, &ctx, &queue, 0);
+        create_context_on(CL_PLAT, CL_DEVICE, 0, &ctx, &queue, 1);
     if (OUT_DEVINFO)
         print_device_info_from_queue(queue);
 
@@ -165,7 +167,7 @@ int32_t main(int32_t argc, char** argv)
 
     Disparity = (uint8_t*) malloc(Width*Height); 
      
-    start = clock();
+    clock_gettime(CLOCK_MONOTONIC, &start);
     
     desc.image_type = CL_MEM_OBJECT_IMAGE2D;
     desc.image_width = w1;
@@ -236,9 +238,13 @@ int32_t main(int32_t argc, char** argv)
         0, NULL, NULL));
         
     normalize_dmap(Disparity, Width, Height);
-    end = clock();
     
-    printf("Grid size: %d %d. Work Group size: %d %d, Elapsed time: %.4lf s.\n", (int) globalSize[0], (int) globalSize[1], (int) wgSize[0], (int) wgSize[1], (double)(end - start) / CLOCKS_PER_SEC);
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+
+    elapsed = (finish.tv_sec - start.tv_sec);
+    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+    
+    printf("Grid size: %d %d. Work Group size: %d %d, Elapsed time: %.4lf s.\n", (int) globalSize[0], (int) globalSize[1], (int) wgSize[0], (int) wgSize[1], elapsed);
     
 
     Error = lodepng_encode_file("depthmap.png", Disparity, Width, Height, LCT_GREY, 8);
