@@ -177,7 +177,7 @@ We considered work-groups sizes to be divisors of width and height of the resize
 
 
 \section{Benchmarks}\label{sec:Benchmarks}
-We have tested our OpenCL implementation on two different machines with Ubuntu 14.04 64 bit. Both machines have NVIDIA GPUs, the same version graphics drivers and CUDA 7.5. We also ran our implementation on the laptop with Intel CPU 6200U Skylake. However, OpenCL implementation turned out to be slower than the original C version. Presumably, it happened due to the communication overhead. We could have improved the benchmark result, but decided to focus only on GPU implementations. Our benchmark results (average of 3 launches) are presented in Table \ref{benchnaive}.
+We have tested our OpenCL implementation on two different machines with Ubuntu 14.04 64 bit. Both machines have NVIDIA GPUs, the same version graphics drivers and CUDA 7.5. We also ran our implementation on the laptop with Intel CPU 6200U Skylake.Our average execution time of the parallel implementation was 29.5206 with 3.79 performance gain (C version running time was 111.7566). We could have improved the benchmark result, but decided to focus only on GPU implementations. Their benchmark results (average of 3 launches) are presented in Table \ref{benchnaive}.
 \begin{table}
 \caption{Benchmarking of the naive OpenCL implementation}\label{benchnaive}
 \centering
