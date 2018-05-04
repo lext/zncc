@@ -1,4 +1,4 @@
-# ZNCC 
+# Stereo Image Disparity Estimation using OpenCL-acceleraed ZNCC algorithm
 Implementations in pure C and with OpenCL acceleration.
 
 Tested environment configurations:
